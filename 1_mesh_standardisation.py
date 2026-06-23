@@ -21,6 +21,20 @@ import os
 import sys
 import xlsxwriter
 import argparse
+from vedo import show
+import vtk
+
+class FileOutputWindow(vtk.vtkOutputWindow):
+    def __init__(self, filename):
+        super().__init__()
+        self.filename = filename
+
+    def DisplayText(self, txt):
+        with open(self.filename, "a") as f:
+            f.write(txt + "\n")
+
+# Redirect VTK output
+vtk.vtkOutputWindow.SetInstance(FileOutputWindow("vtk_output.txt"))
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--meshfile', type=str, metavar='PATH', help='path to input mesh')
@@ -28,12 +42,16 @@ parser.add_argument('--pv_dist', type=int, default=3, help='PV clipping distance
 parser.add_argument('--laa_dist', type=int, default=3, help='LAA clipping distance (mm)')
 parser.add_argument('--maxslope', type=int, default=5, help='Anything above this is ostium')
 parser.add_argument('--clspacing', type=float, default=0.4, help='Resample the centerline with this spacing')
-parser.add_argument('--skippointsfactor', type=float, default=0.1, help='Percentage of points to ignore at beginning of centerline')
+parser.add_argument('--skippointsfactor', type=float, default=0.01, help='Percentage of points to ignore at beginning of centerline')
 parser.add_argument('--highslope', type=float, default=1.2, help='Above this slope we start counting')
 parser.add_argument('--bumpcriterion', type=float, default=0.05, help='Ostium if slope higher than highslope and above bump criterion')
 parser.add_argument('--pvends', type=int, default=1, help='Enforce the centerline to reach the end boundary of the surface.')
 parser.add_argument('--vis', type=int, default=1, help='Set to 1 to visualise clipping results overlaid with original mesh')
 parser.add_argument('--save', type=int, default=0, help='Set to 0 to remove intermediate results (centerlines, clippoints, etc.)')
+parser.add_argument('--change_seeds', type=str, nargs="+", default=[], help="list of seeds to repick")
+parser.add_argument('--eams', action='store_true', help='Mesh was obtained from eam instead of imaging')
+parser.add_argument('--mv_seed', action='store_true', help='Use when MV clipping location is incorrect, select MV clipping point manually')
+
 args = parser.parse_args()
 
 
@@ -54,8 +72,32 @@ if not os.path.exists(seedsfile):
     print('Please, select exactly 5 seeds in this order: \n 1. RSPV \n 2. RIPV \n 3. LIPV \n 4. LSPV \n 5. LAA')
     select_seeds(surface, 'GTLabels', seedsfile, args.vis, laa_seedon)
 else:
-    print('Seeds already selected, using those ones. To compute new seeds, delete file with suffix clip_seeds.vtp')
-seeds_to_csv(seedsfile, 'GTLabels', [77, 76, 78, 79, 36], outseedsfile)
+    
+    if args.change_seeds:
+        print('Please, reselect the seeds in this order: ', args.change_seeds)
+        change_seeds(surface,'GTLabels', seedsfile, args.change_seeds)
+        
+    else:
+        pointspd = readvtp(seedsfile)
+        vertices = pointspd.GetVerts()
+
+        points = pointspd.GetPoints()
+        gtlabels_array = pointspd.GetPointData().GetArray("GTLabels")  
+        gtlabels = vtk_to_numpy(gtlabels_array)
+        old_label = True
+        for i in range(pointspd.GetNumberOfPoints()):
+            if gtlabels[i] == 37:
+                old_label=False
+                break
+        if old_label:
+            for i in range(pointspd.GetNumberOfPoints()):
+                if gtlabels[i] == 36:
+                    gtlabels[i]=37
+        pointspd.GetPointData().AddArray(numpy_to_vtk(gtlabels))
+        writevtp(pointspd, seedsfile)
+        print('Seeds already selected, using those ones. To compute new seeds, delete file with suffix clip_seeds.vtp')
+
+seeds_to_csv(seedsfile, 'GTLabels', [77, 76, 78, 79, 37], outseedsfile)
 
 # Compute centerlines
 outfile = os.path.join(fileroot, filenameroot + '_')
@@ -63,13 +105,12 @@ pv_LAA_centerlines(args.meshfile, outseedsfile, outfile, args.pvends)
 
 # label PVs automatically
 outfile = os.path.join(fileroot, filenameroot + '_')
-clip_veins_sections_and_LAA(args.meshfile, outfile, args.clspacing, args.maxslope, args.skippointsfactor, args.highslope, args.bumpcriterion)
+clip_veins_sections_and_LAA(args.meshfile, outfile, args.clspacing, args.maxslope, args.skippointsfactor, args.highslope, args.bumpcriterion, args.eams)
 
 # clip PV end points
 sufixfile = os.path.join(fileroot, filenameroot + '_')
 inputfile = os.path.join(fileroot, filenameroot + '_autolabels.vtp')
 inputsurface = readvtp(inputfile)
-
 # use special distance (dist_LAA) for the LAA (label=37). Save the info about the clipping planes
 stdmesh, clip_planes = clip_vein_endpoint_and_LAA_save_planes(inputsurface, sufixfile, args.pv_dist, 37, args.laa_dist)
 
@@ -91,12 +132,25 @@ max_hole_size = 4  # empirical, be careful to do not close pv ostiums, check vis
 stdmesh_closed = fillholes(stdmesh, max_hole_size)
 print('\n')
 transfer_all_scalar_arrays(surface, stdmesh_closed)
-
 if args.vis > 0:
-    visualise_default(stdmesh_closed, surface, 'STD mesh', 'autolabels', 36, 79)
+    visualise_default(stdmesh_closed, surface, 'STD mesh', 'autolabels', 36, 79, readvtp(seedsfile))
 writevtk(stdmesh_closed, os.path.join(fileroot, filenameroot + '_clipped.vtk'))
 
 # Apply crinkle clip to the veins. It does not cut cells.
+array_labels = vtk_to_numpy(inputsurface.GetPointData().GetArray("autolabels"))
+locator = vtk.vtkPointLocator()
+locator.SetDataSet(stdmesh_closed)
+locator.BuildLocator()
+for p in range(surface.GetNumberOfPoints()):
+    point = surface.GetPoint(p)
+    closestpoint_id = locator.FindClosestPoint(point)
+    region = stdmesh_closed.GetPointData().GetArray("autolabels").GetValue(closestpoint_id)
+    array_labels[p] = region
+newarray = numpy_to_vtk(array_labels)
+newarray.SetName("combined")
+surface.GetPointData().AddArray(newarray)
+writevtk(surface, fileroot + "\\" + filenameroot + "_with_pv.vtk") 
+
 array_labels = np.zeros(surface.GetNumberOfPoints())
 locator = vtk.vtkPointLocator()
 locator.SetDataSet(stdmesh_closed)
@@ -117,9 +171,12 @@ writevtk(cleanpolydata(m_ccliped), os.path.join(fileroot, filenameroot + '_crink
 # MV clip, auto
 w = [0.95, 0.05, 0.0]
 o_file = os.path.join(fileroot, filenameroot + '_clipped_mitral')
-surfaceclipped = find_mitral_cylinder_pvs(stdmesh, 'autolabels', o_file, 0.35, w, 0)
+if args.mv_seed:
+    surfaceclipped = find_mitral_sphere_pvs_manual(stdmesh, 'autolabels', o_file, os.path.join(fileroot, filenameroot + '_mvseed.vtp'), args.eams)
+else:
+    surfaceclipped = find_mitral_sphere_pvs(stdmesh, 'autolabels', o_file, args.eams)
 if args.vis > 0:
-    visualise_color(surfaceclipped, surface, 'Mitral Valve clip')
+    visualise_two_meshes(surfaceclipped, surface, 'Mitral Valve clip')
 writevtk(cleanpolydata(surfaceclipped), o_file + '.vtk')
 
 if args.save == 0:  # remove intermediate results (centerlines, clippoints, etc.)

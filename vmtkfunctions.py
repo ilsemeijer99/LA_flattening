@@ -16,12 +16,12 @@ def vmtkcenterlines(surface, sourcepoints, targetpoints, endpoints=0):
     computer.Execute()
     return computer.Centerlines
 
-def vmtksurfacewriter(polydata, filename):
-    # print "Writing",filename
-    writer = vmtkscripts.vmtkSurfaceWriter()
-    writer.Surface = polydata
-    writer.OutputFileName = filename
-    writer.Execute()
+# def vmtksurfacewriter(polydata, filename):
+#     # print "Writing",filename
+#     writer = vmtkscripts.vmtkSurfaceWriter()
+#     writer.Surface = polydata
+#     writer.OutputFileName = filename
+#     writer.Execute()
 
 def vmtkcenterlineresampling(centerline, length=.1):
     resampler = vmtkscripts.vmtkCenterlineResampling()
