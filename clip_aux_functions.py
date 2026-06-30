@@ -259,6 +259,7 @@ def veins_overlap(v1, v2, tol=1):
             if vtk.vtkMath.Distance2BetweenPoints(p, q) < min_dist:
                 min_dist = vtk.vtkMath.Distance2BetweenPoints(p, q)
                 if min_dist < tol**2:
+                    print(f"[INFO] Veins overlap detected: distance {np.sqrt(min_dist)} < tolerance {tol}")
                     return True
     return False
 
@@ -395,16 +396,13 @@ def clip_veins_sections_and_LAA(inputfile, sufixfile, clspacing, maxslope, skipp
         writevtp(cl2, sufixfile +'clvein' + str(k) + '.vtp')
 
         sections = vmtkcenterlinesections(surface, cl2)
-        # for i in range(1, sections.GetNumberOfCells()):
-        #     visualize_min_max_diam(sections, i, surface)
         closed = sections.GetCellData().GetArray('CenterlineSectionClosed')
         maxsize = sections.GetCellData().GetArray('CenterlineSectionMaxSize')
         if k == 5 or eams:
             print(f"Using new clipping method for {branchlabel[k]}")
             areaarray = sections.GetCellData().GetArray('CenterlineSectionArea')
             area_values = [areaarray.GetValue(i) for i in range(1, sections.GetNumberOfCells()) if closed.GetValue(i - 1)]
-            #size_values = [maxsize.GetValue(i) for i in range(1, sections.GetNumberOfCells()) if closed.GetValue(i - 1)]
-            #diameter_ratio_values = compute_all_diameters(sections)
+            
             #filtering the cross section along centerline signal to extract peaks 
             filtered_signal, normalized_signal = apply_high_pass_filter(area_values)
             filtered_signal = savgol_filter(filtered_signal, window_length=11, polyorder=3)
@@ -439,13 +437,14 @@ def clip_veins_sections_and_LAA(inputfile, sufixfile, clspacing, maxslope, skipp
         for j in range(i+1, len(branch_infos)):
             keep, move = branch_infos[i], branch_infos[j]
             count = 0
-            while veins_overlap(keep['vein'], move['vein'], tol=1.1): 
+            while veins_overlap(keep['vein'], move['vein'], tol=3): 
                 if count == 0:
                     print(f"Overlapping veins {keep['k']} and {move['k']}")
                 
                 keep, move = decide_which_to_move(keep, move)
-                if move['clippointid'] == 5:
-                    if keep['clippointid'] == 5:
+                if move['clippointid'] == 3:
+                    print("test")
+                    if keep['clippointid'] == 3:
                         print(f"[WARNING] Could not resolve overlap for branches {keep['k']} and {move['k']}, both reached end of centerline.")
                         break
                     else:
@@ -498,15 +497,15 @@ def clip_veins_sections_and_LAA(inputfile, sufixfile, clspacing, maxslope, skipp
                     count = 0
                 else:
                     count += 1 
-                #visualise_veins(keep['vein'], move['vein'], surface)
-            keep['clippointid'] -= 1
+                    #visualise_veins(keep['vein'], move['vein'], surface)
+            #keep['clippointid'] -= 1
             keep['vein'] = clip_vein(surface, keep['cl'], keep['clippointid'])
             keep['length'] = centerline_length(keep['vein'])
             np.savetxt(sufixfile + f'clippointid{keep["k"]}.csv', np.array([keep['clippointid']]), fmt='%i')
             if count != 0:
                 print("Area of vein", keep["k"], ":",keep['area'].GetValue(keep['clippointid']))
                 print("Area of vein", move["k"], ":",move['area'].GetValue(move['clippointid']))
-            move['clippointid'] -= 1
+            #move['clippointid'] -= 1
             move['vein'] = clip_vein(surface, move['cl'], move['clippointid'])
             move['length'] = centerline_length(move['vein'])
             
@@ -701,8 +700,7 @@ def find_mitral_sphere_pvs(surface, arrayname, outfile, eams=False, vis=0):
     # ========== Extract atrial body ==========
     border_edges = extractboundaryedge(surface)
     surface_filled = fillholes(surface, 1000) if border_edges.GetNumberOfPoints() > 0 else surface
-    body = pointthreshold(surface, arrayname, 36.0, 36.0)
-    center_body = np.array(pointset_centreofmass(body))
+    center_body = np.array(pointset_centreofmass(surface_filled))
 
     # ========== Extract ostia centers ==========
     visualise_two_meshes(surface_filled, surface, arrayname)
@@ -752,7 +750,7 @@ def find_mitral_sphere_pvs(surface, arrayname, outfile, eams=False, vis=0):
         clipped_surface = sphereclip(surface, clip_center, radius_sphere)
         
     else:
-        w = [0.95, 0.05, 0.0]
+        w = [1, 0, 0.0]
         scale=0.35
         # final pvscom average of left and right
         pvscom = acumvectors(center_left_pv, center_right_pv)
@@ -775,10 +773,10 @@ def find_mitral_sphere_pvs(surface, arrayname, outfile, eams=False, vis=0):
         pvcrossn = normalizevector(pvcross)
 
         # thought of using for weighting but defualt values seem all right
-        bodylength, pl1, pl2= computelengthalongvector(body, center_body, pvdirn)
+        bodylength, pl1, pl2= computelengthalongvector(surface_filled, center_body, pvdirn)
         measurepoint = sumvectors(center_body, scale*bodylength, pvdirn)
-        bodythick, pt1, pt2 = computelengthalongvector(body, measurepoint, ostiacrossn)
-        bodywidth, pw1, pw2 = computelengthalongvector(body, measurepoint, pvcrossn)
+        bodythick, pt1, pt2 = computelengthalongvector(surface_filled, measurepoint, ostiacrossn)
+        bodywidth, pw1, pw2 = computelengthalongvector(surface_filled, measurepoint, pvcrossn)
         print('length', bodylength, 'width', bodywidth, 'thickness', bodythick)
         visualise_body_dimensions_vtk(surface, center_body, measurepoint, pvdirn, pvcrossn, ostiacrossn, bodylength, bodywidth, bodythick)
 
@@ -787,7 +785,7 @@ def find_mitral_sphere_pvs(surface, arrayname, outfile, eams=False, vis=0):
         for pt in linepts:
             pvdir_temp = subtractvectors(pt, center_body)
             pvdirn_temp = normalizevector(pvdir_temp)
-            bodylength_temp, _, _ = computelengthalongvector(body, center_body, pvdirn_temp)
+            bodylength_temp, _, _ = computelengthalongvector(surface_filled, center_body, pvdirn_temp)
             if bodylength_temp>bodylength_max:
                 print('length increased')
                 bodylength_max = bodylength_temp
@@ -804,10 +802,10 @@ def find_mitral_sphere_pvs(surface, arrayname, outfile, eams=False, vis=0):
                 pvcrossn = normalizevector(pvcross)
 
                 # thought of using for weighting but defualt values seem all right
-                bodylength, pl1, pl2= computelengthalongvector(body, center_body, pvdirn)
+                bodylength, pl1, pl2= computelengthalongvector(surface_filled, center_body, pvdirn)
                 measurepoint = sumvectors(center_body, scale*bodylength, pvdirn)
-                bodythick, pt1, pt2 = computelengthalongvector(body, measurepoint, ostiacrossn)
-                bodywidth, pw1, pw2 = computelengthalongvector(body, measurepoint, pvcrossn)
+                bodythick, pt1, pt2 = computelengthalongvector(surface_filled, measurepoint, ostiacrossn)
+                bodywidth, pw1, pw2 = computelengthalongvector(surface_filled, measurepoint, pvcrossn)
                 
                 scale = 0.3
                 #w = [0.7, -0.05, 0.25]

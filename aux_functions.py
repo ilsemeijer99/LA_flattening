@@ -428,6 +428,113 @@ def find_create_path_contours(mesh, c1, c2, c3=[]):
 
     return best_path
 
+def update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, index_A, index_A_cont, index_B, index_B_cont):
+    new_id = int(np.where(common_cont_ids == pathA_ids[index_A_cont])[0])+1
+    pathA_temp = find_create_path(m_open, common_cont_ids[new_id], pathA_ids[index_A])
+    pathA_ids_temp = get_ids(pathA_temp, locator_open).astype(int)
+    if paths_intersect(pathA_ids_temp, pathB_ids):
+        new_id = int(np.where(common_cont_ids == pathB_ids[index_B_cont])[0])+1
+        pathB = find_create_path(m_open, common_cont_ids[new_id], pathB_ids[index_B])
+    else:
+        pathA = pathA_temp
+    return pathA, pathB
+        
+def adjust_path(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids):
+    if pathA_ids[0] in common_cont_ids:
+        if pathB_ids[0] in common_cont_ids:
+            if pathA_ids[0] == pathB_ids[0]:
+                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -1, 0)
+            else:
+                pathA = find_create_path(m_open, pathA_ids[-1], pathB_ids[0])
+                pathB = find_create_path(m_open, pathB_ids[-1], pathA_ids[0])
+        elif pathB_ids[-1] in common_cont_ids:
+            if pathA_ids[0] == pathB_ids[-1]:
+                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -0, -1)
+            else:
+                pathA = find_create_path(m_open, pathA_ids[-1], pathB_ids[-1])
+                pathB = find_create_path(m_open, pathA_ids[0], pathB_ids[0])
+    elif pathA_ids[-1] in common_cont_ids:
+        if pathB_ids[0] in common_cont_ids:
+            if pathA_ids[-1] == pathB_ids[0]:
+                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, -1, 0)
+            else:
+                pathA = find_create_path(m_open, pathB_ids[0], pathA_ids[0])
+                pathB = find_create_path(m_open, pathB_ids[-1], pathA_ids[-1])
+        elif pathB_ids[-1] in common_cont_ids:
+            if pathA_ids[-1] == pathB_ids[-1]:
+                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, 0, -1)
+            else:
+                pathA = find_create_path(m_open, pathB_ids[-1], pathA_ids[0])
+                pathB = find_create_path(m_open, pathA_ids[-1], pathB_ids[0])
+    return pathA, pathB
+
+def check_and_adjust_paths(locator_open, path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c,
+                            ripv_cont_ids, rspv_cont_ids, lipv_cont_ids, lspv_cont_ids, laa_cont_ids):
+    path1_ids = get_ids(path1, locator_open).astype(int)
+    path2_ids = get_ids(path2, locator_open).astype(int)
+    path3_ids = get_ids(path3, locator_open).astype(int)
+    path4_ids = get_ids(path4, locator_open).astype(int)
+    path5_ids = get_ids(path5, locator_open).astype(int)
+    path6_ids = get_ids(path6, locator_open).astype(int)
+    path7_ids = get_ids(path7, locator_open).astype(int)   
+    path8a_ids = get_ids(path8a, locator_open).astype(int)  
+    path8b_ids = get_ids(path8b, locator_open).astype(int)                                                                                                                                                                                                                                                                                                                                        
+    path8c_ids = get_ids(path8c, locator_open).astype(int)                                                                                                                                                                                                                                                                                                                                          
+
+    if paths_intersect(path1_ids, path2_ids):
+        print("Overlap detected between paths 1 and 2, which have the RIPV as common contour.")
+        path1, path2 = adjust_path(path1, path2, path1_ids, path2_ids, ripv_cont_ids)
+    if paths_intersect(path1_ids, path4_ids):
+        print("Overlap detected between paths 1 and 4, which have the RSPV as common contour.")
+        path1, path4 = adjust_path(path1, path4, path1_ids, path4_ids, rspv_cont_ids)
+    if paths_intersect(path1_ids, path5_ids):
+        print("Overlap detected between paths 1 and 5, which have the RSPV as common contour.")
+        path1, path5 = adjust_path(path1, path5, path1_ids, path5_ids, rspv_cont_ids)
+    if paths_intersect(path1_ids, path6_ids):
+        print("Overlap detected between paths 1 and 6, which have the RIPV as common contour.")
+        path1, path6 = adjust_path(path1, path6, path1_ids, path6_ids, ripv_cont_ids)
+    if paths_intersect(path2_ids, path3_ids):
+        print("Overlap detected between paths 2 and 3, which have the LIPV as common contour.")
+        path2, path3 = adjust_path(path2, path3, path2_ids, path3_ids, lipv_cont_ids)
+    if paths_intersect(path2_ids, path6_ids):
+        print("Overlap detected between paths 2 and 6, which have the RIPV as common contour.")
+        path2, path6 = adjust_path(path2, path6, path2_ids, path6_ids, ripv_cont_ids)
+    if paths_intersect(path2_ids, path7_ids):
+        print("Overlap detected between paths 2 and 7, which have the LIPV as common contour.")
+        path2, path7 = adjust_path(path2, path7, path2_ids, path7_ids, lipv_cont_ids)
+    if paths_intersect(path3_ids, path4_ids):
+        print("Overlap detected between paths 3 and 4, which have the LSPV as common contour.")
+        path3, path4 = adjust_path(path3, path4, path3_ids, path4_ids, lspv_cont_ids)
+    if paths_intersect(path3_ids, path7_ids):
+        print("Overlap detected between paths 3 and 7, which have the LIPV as common contour.")
+        path3, path7 = adjust_path(path3, path7, path3_ids, path7_ids, lipv_cont_ids)
+    if paths_intersect(path3_ids, path8a_ids):
+        print("Overlap detected between paths 3 and 8a, which have the LSPV as common contour.")
+        path3, path8a = adjust_path(path3, path8a, path3_ids, path8a_ids, lspv_cont_ids)
+    if paths_intersect(path4_ids, path5_ids):
+        print("Overlap detected between paths 4 and 5, which have the RSPV as common contour.")
+        path4, path5 = adjust_path(path4, path5, path4_ids, path5_ids, rspv_cont_ids)
+    if paths_intersect(path4_ids, path8a_ids):
+        print("Overlap detected between paths 4 and 8a, which have the LSPV as common contour.")
+        path4, path8a = adjust_path(path4, path8a, path4_ids, path8a_ids, lspv_cont_ids)
+    if paths_intersect(path4_ids, path8c_ids):
+        print("Overlap detected between paths 4 and 8c, which have the RSPV as common contour.")
+        path4, path8c = adjust_path(path4, path8c, path4_ids, path8c_ids, rspv_cont_ids)
+    if paths_intersect(path5_ids, path8c_ids):
+        print("Overlap detected between paths 5 and 8c, which have the RSPV as common contour.")
+        path5, path8c = adjust_path(path5, path8c, path5_ids, path8c_ids, rspv_cont_ids)
+    if paths_intersect(path8a_ids, path8b_ids):
+        print("Overlap detected between paths 8a and 8b, which have the LAA as common contour.")
+        path8a, path8b = adjust_path(path8a, path8b, path8a_ids, path8b_ids, laa_cont_ids)
+    if paths_intersect(path8a_ids, path8c_ids):
+        print("Overlap detected between paths 8a and 8c, which have the LAA as common contour.")
+        path8a, path8c = adjust_path(path8a, path8c, path8a_ids, path8c_ids, laa_cont_ids)
+    if paths_intersect(path8b_ids, path8c_ids):
+        print("Overlap detected between paths 8b and 8c, which have the LAA as common contour.")
+        path8b, path8c = adjust_path(path8b, path8c, path8b_ids, path8c_ids, laa_cont_ids)
+    
+    return path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c
+
 def find_trimmed_path_between_contours(mesh, p1, p2, contourA_ids, contourB_ids):
     """
     Compute shortest path on mesh from p1 to p2,
@@ -1282,53 +1389,67 @@ def get_segment_ids_in_to_be_flat_mesh(path, locator, intersect_end, intersect_b
     s = np.delete(final_s, index2)
     return s
 
-def export_polyline_from_coords(coords, filename, close_loop=False):
+def find_location_of_repeated_ids(overlap, s1, s2, s3, s4, s5, s6, s7, s8a, s8b, s8c, mv_s1_prop, mv_s2_prop, mv_s3_prop, mv_s4_prop, 
+    rspv_s1_prop, rspv_s2_prop, rspv_s3_prop, rspv_s4_prop, ripv_s1_prop, ripv_s2_prop, ripv_s3_prop, lipv_s1_prop, lipv_s2_prop, lipv_s3_prop, 
+    lspv_s1_prop, lspv_s2_prop, lspv_s3_prop, laa_s1, laa_s2, laa_s3):
+    for oid in overlap:
+        print("ID:", oid)
 
-    coords = np.asarray(coords)
+        # -------- Constraint segments --------
+        if oid in s1: print("  in constraint: s1")
+        if oid in s2: print("  in constraint: s2")
+        if oid in s3: print("  in constraint: s3")
+        if oid in s4: print("  in constraint: s4")
+        if oid in s5: print("  in constraint: s5")
+        if oid in s6: print("  in constraint: s6")
+        if oid in s7: print("  in constraint: s7")
+        if oid in s8a: print("  in constraint: s8a")
+        if oid in s8b: print("  in constraint: s8b")
+        if oid in s8c: print("  in constraint: s8c")
 
-    # If only XY given, add Z=0
-    if coords.shape[1] == 2:
-        coords = np.column_stack([coords, np.zeros(len(coords))])
+        # -------- Mitral valve (MV) --------
+        if oid in mv_s1_prop: print("  in contour: mv_s1")
+        if oid in mv_s2_prop: print("  in contour: mv_s2")
+        if oid in mv_s3_prop: print("  in contour: mv_s3")
+        if oid in mv_s4_prop: print("  in contour: mv_s4")
 
-    points = vtk.vtkPoints()
-    polyLine = vtk.vtkPolyLine()
+        # -------- RSPV --------
+        if oid in rspv_s1_prop: print("  in contour: rspv_s1")
+        if oid in rspv_s2_prop: print("  in contour: rspv_s2")
+        if oid in rspv_s3_prop: print("  in contour: rspv_s3")
+        if oid in rspv_s4_prop: print("  in contour: rspv_s4")
 
-    n = len(coords)
-    polyLine.GetPointIds().SetNumberOfIds(n + (1 if close_loop else 0))
+        # -------- RIPV --------
+        if oid in ripv_s1_prop: print("  in contour: ripv_s1")
+        if oid in ripv_s2_prop: print("  in contour: ripv_s2")
+        if oid in ripv_s3_prop: print("  in contour: ripv_s3")
 
-    for i, p in enumerate(coords):
-        points.InsertNextPoint(float(p[0]), float(p[1]), float(p[2]))
-        polyLine.GetPointIds().SetId(i, i)
+        # -------- LIPV --------
+        if oid in lipv_s1_prop: print("  in contour: lipv_s1")
+        if oid in lipv_s2_prop: print("  in contour: lipv_s2")
+        if oid in lipv_s3_prop: print("  in contour: lipv_s3")
 
-    # Close loop if requested
-    if close_loop:
-        polyLine.GetPointIds().SetId(n, 0)
+        # -------- LSPV --------
+        if oid in lspv_s1_prop: print("  in contour: lspv_s1")
+        if oid in lspv_s2_prop: print("  in contour: lspv_s2")
+        if oid in lspv_s3_prop: print("  in contour: lspv_s3")
 
-    cells = vtk.vtkCellArray()
-    cells.InsertNextCell(polyLine)
-
-    polyData = vtk.vtkPolyData()
-    polyData.SetPoints(points)
-    polyData.SetLines(cells)
-
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(polyData)
-    writer.Write()
-
-    print("Exported:", filename)
+        # -------- LAA --------
+        if oid in laa_s1: print("  in contour: laa_s1")
+        if oid in laa_s2: print("  in contour: laa_s2")
+        if oid in laa_s3: print("  in contour: laa_s3")
 
 def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_lspv, rhole_laa, xhole_center, yhole_center, laa_hole_center_x, laa_hole_center_y,
-                              s9size, s10size, s11size, s12size, pv_laa_segment_lengths, t_v5_1, t_v5_2, t_v6, t_v7, t_v8, args):
+                              segment_lengths, t_v5_1, t_v5_2, t_v6, t_v7, t_v8, args):
     """Define BOUNDARY target (x0,y0) coordinates given template parameters (hole radii and positions) and number of points of segments"""
-    p_bound = s9size + s10size + s11size + s12size + np.sum(pv_laa_segment_lengths)
+    p_bound = np.sum(segment_lengths)
     x0_bound = np.zeros(int(p_bound))
     y0_bound = np.zeros(int(p_bound))
     # start with BOUNDARY (disk contour) 4 segments of the mv <-> contour of the disk
     # s9: left
     ind1 = 0
-    ind2 = s9size
-    t = np.linspace(-(2*np.pi - t_v6), t_v5_1, s9size+1, endpoint=True)   # +1 because later I will exclude the last point
+    ind2 = segment_lengths[5, 0]
+    t = np.linspace(-(2*np.pi - t_v6), t_v5_1, segment_lengths[5, 0] +1, endpoint=True)   # +1 because later I will exclude the last point
     # flip to have clock wise direction in the angle
     aux = np.zeros(t.size)
     for i in range(t.size):
@@ -1340,8 +1461,8 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
 
     # s10: bottom
     ind1 = ind2
-    ind2 = ind2 + s10size
-    t = np.linspace(t_v7, t_v6, s10size+1, endpoint=True)
+    ind2 = ind2 + segment_lengths[5, 1]
+    t = np.linspace(t_v7, t_v6, segment_lengths[5, 1]+1, endpoint=True)
     # flip to have clock wise direction in the angle
     aux = np.zeros(t.size)
     for i in range(t.size):
@@ -1353,8 +1474,8 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
 
     # s11: left - from v7 to v8
     ind1 = ind2
-    ind2 = ind2 + s11size
-    t = np.linspace(t_v8, t_v7, s11size+1, endpoint=True)
+    ind2 = ind2 + segment_lengths[5, 2]
+    t = np.linspace(t_v8, t_v7, segment_lengths[5, 2]+1, endpoint=True)
     # flip to have clock wise direction in the angle
     aux = np.zeros(t.size)
     for i in range(t.size):
@@ -1366,8 +1487,8 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
 
     # s12: top
     ind1 = ind2
-    ind2 = ind2 + s12size
-    t = np.linspace(t_v5_1, t_v8, s12size+1, endpoint=True)
+    ind2 = ind2 + segment_lengths[5, 3]
+    t = np.linspace(t_v5_1, t_v8, segment_lengths[5, 3]+1, endpoint=True)
     # flip to have clock wise direction in the angle
     aux = np.zeros(t.size)
     for i in range(t.size):
@@ -1381,54 +1502,54 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
     # RSPV, starts in pi
     # rspv_s1
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[0,0]
-    t = np.linspace(3*np.pi/2, np.pi ,  pv_laa_segment_lengths[0, 0]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[0,0]
+    t = np.linspace(3*np.pi/2, np.pi ,  segment_lengths[0, 0]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_rspv + xhole_center[0]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_rspv + yhole_center[0]
 
     # rspv_s2
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[0,1]
-    t = np.linspace(np.pi , np.pi - t_v5_2,  pv_laa_segment_lengths[0, 1]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[0,1]
+    t = np.linspace(np.pi , np.pi - t_v5_2,  segment_lengths[0, 1]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_rspv + xhole_center[0]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_rspv + yhole_center[0]
     
     # rspv_s3
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[0,2]
-    t = np.linspace(np.pi - t_v5_2, t_v5_1, pv_laa_segment_lengths[0, 2]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[0,2]
+    t = np.linspace(np.pi - t_v5_2, t_v5_1, segment_lengths[0, 2]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_rspv + xhole_center[0]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_rspv + yhole_center[0]
 
     # rspv_s4
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[0, 3]
-    t = np.linspace(2*np.pi + t_v5_1,  3*np.pi/2, pv_laa_segment_lengths[0, 3]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[0, 3]
+    t = np.linspace(2*np.pi + t_v5_1,  3*np.pi/2, segment_lengths[0, 3]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_rspv + xhole_center[0]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_rspv + yhole_center[0]
 
     # RIPV, starts in pi
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[1,0]
-    t = np.linspace(np.pi, t_v6, pv_laa_segment_lengths[1, 0]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[1,0]
+    t = np.linspace(np.pi, t_v6, segment_lengths[1, 0]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_ripv + xhole_center[1]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_ripv + yhole_center[1]
     # ripv_s2
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[1,1]
-    t = np.linspace(t_v6, 2*np.pi + np.pi/2, pv_laa_segment_lengths[1, 1]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[1,1]
+    t = np.linspace(t_v6, 2*np.pi + np.pi/2, segment_lengths[1, 1]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_ripv + xhole_center[1]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_ripv + yhole_center[1]
     # ripv_s3
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[1,2]
-    t = np.linspace(np.pi/2, np.pi, pv_laa_segment_lengths[1, 2]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[1,2]
+    t = np.linspace(np.pi/2, np.pi, segment_lengths[1, 2]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_ripv + xhole_center[1]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_ripv + yhole_center[1]
@@ -1436,24 +1557,24 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
     # LIPV, starts in 0
     # lipv_s1
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[2, 0]
-    t = np.linspace(np.pi/2, t_v7, pv_laa_segment_lengths[2, 0]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[2, 0]
+    t = np.linspace(np.pi/2, t_v7, segment_lengths[2, 0]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_lipv + xhole_center[2]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_lipv + yhole_center[2]
 
     # lipv_s2
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[2, 1]
-    t = np.linspace(t_v7, 2*np.pi, pv_laa_segment_lengths[2, 1]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[2, 1]
+    t = np.linspace(t_v7, 2*np.pi, segment_lengths[2, 1]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_lipv + xhole_center[2]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_lipv + yhole_center[2]
     
     # lipv_s3
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[2, 2]
-    t = np.linspace(0, np.pi/2, pv_laa_segment_lengths[2, 2]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[2, 2]
+    t = np.linspace(0, np.pi/2, segment_lengths[2, 2]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_lipv + xhole_center[2]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_lipv + yhole_center[2]
@@ -1461,22 +1582,22 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
     # LSPV, starts in 0
     # lspv_s1
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[3, 0]
-    t = np.linspace(0, np.pi/2, pv_laa_segment_lengths[3, 0]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[3, 0]
+    t = np.linspace(0, np.pi/2, segment_lengths[3, 0]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_lspv + xhole_center[3]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_lspv + yhole_center[3]
     # lspv_s2
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[3, 1]
-    t = np.linspace(np.pi/2, 3*np.pi/2, pv_laa_segment_lengths[3, 1]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[3, 1]
+    t = np.linspace(np.pi/2, 3*np.pi/2, segment_lengths[3, 1]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_lspv + xhole_center[3]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_lspv + yhole_center[3]
     # lspv_s3
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[3, 2]
-    t = np.linspace(3*np.pi/2, 2*np.pi, pv_laa_segment_lengths[3, 2]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[3, 2]
+    t = np.linspace(3*np.pi/2, 2*np.pi, segment_lengths[3, 2]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_lspv + xhole_center[3]
     y0_bound[ind1: ind2] = np.sin(t) * rhole_lspv + yhole_center[3]
@@ -1484,22 +1605,22 @@ def define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_l
     # LAA hole, circumf
     # laa s1
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[4, 0]
-    t = np.linspace(0, t_v8, pv_laa_segment_lengths[4, 0]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[4, 0]
+    t = np.linspace(0, t_v8, segment_lengths[4, 0]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_laa + laa_hole_center_x
     y0_bound[ind1: ind2] = np.sin(t) * rhole_laa + laa_hole_center_y
     # laa s2
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[4, 1]
-    t = np.linspace(t_v8, 3*np.pi/2, pv_laa_segment_lengths[4, 1]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[4, 1]
+    t = np.linspace(t_v8, 3*np.pi/2, segment_lengths[4, 1]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_laa + laa_hole_center_x
     y0_bound[ind1: ind2] = np.sin(t) * rhole_laa + laa_hole_center_y
     # laa s3
     ind1 = ind2
-    ind2 = ind2 + pv_laa_segment_lengths[4, 2]
-    t = np.linspace(3*np.pi/2, 2*np.pi, pv_laa_segment_lengths[4, 2]+1, endpoint=True)  # skip last one later
+    ind2 = ind2 + segment_lengths[4, 2]
+    t = np.linspace(3*np.pi/2, 2*np.pi, segment_lengths[4, 2]+1, endpoint=True)  # skip last one later
     t = t[0:len(t)-1]
     x0_bound[ind1: ind2] = np.cos(t) * rhole_laa + laa_hole_center_x
     y0_bound[ind1: ind2] = np.sin(t) * rhole_laa + laa_hole_center_y

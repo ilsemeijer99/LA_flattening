@@ -30,7 +30,7 @@ from matplotlib.colors import ListedColormap, to_hex
 import sys
 import os
 import argparse
-from cleaning_non_manifold import *
+from cleaning_aux_functions import *
 parser = argparse.ArgumentParser()
 parser.add_argument('--meshfile', type=str, metavar='PATH', help='path to input mesh')
 parser.add_argument('--save_conts', type=bool, default=False, help='set to true to save mesh contours/contraints')
@@ -42,16 +42,13 @@ filenameroot = os.path.splitext(filename)[0][:-15]
 if os.path.isfile(args.meshfile)==False:
     sys.exit('ERROR: input file does not exist')
 else:
-    print(args.meshfile)
-    mesh = readvtk(args.meshfile)
+    m_open = readvtk(args.meshfile)
 
+to_be_flat_path = os.path.join(fileroot, filenameroot + '_to_be_flat.vtk')
+output_path = os.path.join(fileroot, filenameroot + '_flat.vtk')
+input_path = os.path.join(fileroot, filenameroot + '_autolabels.vtp')
 
-to_be_flat_filename = args.meshfile[0:len(args.meshfile)-19] + '_to_be_flat.vtk'
-print(to_be_flat_filename)
-m_out = args.meshfile[0:len(args.meshfile) - 4] + '_flat.vtk'
-inputfile = os.path.join(fileroot, filenameroot + '_autolabels.vtp')
-print(inputfile)
-m_whole = readvtp(inputfile)
+m_whole = readvtp(input_path)
 ##################   Template creation. Define position and radius of PV holes, and radius disk. Adapt to input mesh.    ##################
 rdisk = 0.5
 pv_centers = np.zeros([2, 4])
@@ -104,36 +101,9 @@ propn_lspv_s1, propn_lspv_s2, propn_lspv_s3, _ = proportions[3, :]
 propn_laa_s1, propn_laa_s2, propn_laa_s3, _ = proportions[4, :]
 propn_mv_s1, propn_mv_s2,  propn_mv_s3, propn_mv_s4 = define_mv_segments_proportions()
 
-
 ##################    Open PVs and LAA holes (get 'to_be_flat_mesh'), identify contours and dividing paths in the to_be_flat mesh   ##################
-if os.path.isfile(to_be_flat_filename[:-4] + "_manifold.vtk"):
-    to_be_flat_filename = to_be_flat_filename[:-4] + "_manifold.vtk"
-    m_open = readvtk(to_be_flat_filename)
-    print("Using already cleaned mesh: "+to_be_flat_filename)
-else:
-    m_open = mesh # cleanpolydata(pointthreshold(mesh, 'hole', 0, 0))
-    writevtk(m_open, to_be_flat_filename)
-
-    # clean m_open here
-    problematic_faces, collected_cell_ids = extract_cells_from_non_manifold_edges(to_be_flat_filename)
-
-    if problematic_faces is not None:
-        problematic_faces.plot()
-
-    # Remove problematic cells and save the cleaned mesh
-    m_open = remove_problematic_cells_and_save(to_be_flat_filename, collected_cell_ids, to_be_flat_filename[:-4] + "_manifold.vtk", fill_holes=True, hole_size=5)
-    to_be_flat_filename = to_be_flat_filename[:-4] + "_manifold.vtk"
-
-    n_new_cells = detect_non_manifold_edges(to_be_flat_filename)[0]
-    if n_new_cells == 0:
-        print("No non-manifold edges detected in the cleaned mesh.")
-    else:
-        print(f"Warning: {n_new_cells} non-manifold edges detected in the cleaned mesh. Check if location is not on PVs")
-    m_open = readvtk(to_be_flat_filename)
-
 # contours
 m_whole, cont_rspv, cont_ripv, cont_lipv, cont_lspv, cont_mv, cont_laa = extract_LA_contours(m_open, args.meshfile, m_whole,  args.save_conts)
-#writevtk(m_whole, to_be_flat_filename)
 
 locator, locator_open, locator_rspv, locator_ripv, locator_lipv, locator_lspv, locator_laa = build_locators(m_whole, m_open, cont_rspv, cont_ripv, cont_lipv, cont_lspv, cont_laa)
 mv_cont_ids = get_mv_contour_ids(cont_mv, locator_open).astype(int)
@@ -154,75 +124,9 @@ path8a = find_create_path_contours(m_open, laa_cont_ids, lspv_cont_ids)
 path8b = find_create_path_contours(m_open, mv_cont_ids, laa_cont_ids)
 path8c = find_create_path_contours(m_open, laa_cont_ids, rspv_cont_ids)    
 
-def update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, index_A, index_A_cont, index_B, index_B_cont):
-    new_id = int(np.where(common_cont_ids == pathA_ids[index_A_cont])[0])+1
-    pathA_temp = find_create_path(m_open, common_cont_ids[new_id], pathA_ids[index_A])
-    pathA_ids_temp = get_ids(pathA_temp, locator_open).astype(int)
-    if paths_intersect(pathA_ids_temp, pathB_ids):
-        new_id = int(np.where(common_cont_ids == pathB_ids[index_B_cont])[0])+1
-        pathB = find_create_path(m_open, common_cont_ids[new_id], pathB_ids[index_B])
-    else:
-        pathA = pathA_temp
-    return pathA, pathB
-        
-
-def adjust_path(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids):
-    if pathA_ids[0] in common_cont_ids:
-        if pathB_ids[0] in common_cont_ids:
-            if pathA_ids[0] == pathB_ids[0]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -1, 0)
-            else:
-                pathA = find_create_path(m_open, pathA_ids[-1], pathB_ids[0])
-                pathB = find_create_path(m_open, pathB_ids[-1], pathA_ids[0])
-        elif pathB_ids[-1] in common_cont_ids:
-            if pathA_ids[0] == pathB_ids[-1]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -0, -1)
-            else:
-                pathA = find_create_path(m_open, pathA_ids[-1], pathB_ids[-1])
-                pathB = find_create_path(m_open, pathA_ids[0], pathB_ids[0])
-    elif pathA_ids[-1] in common_cont_ids:
-        if pathB_ids[0] in common_cont_ids:
-            if pathA_ids[-1] == pathB_ids[0]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, -1, 0)
-            else:
-                pathA = find_create_path(m_open, pathB_ids[0], pathA_ids[0])
-                pathB = find_create_path(m_open, pathB_ids[-1], pathA_ids[-1])
-        elif pathB_ids[-1] in common_cont_ids:
-            if pathA_ids[-1] == pathB_ids[-1]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, 0, -1)
-            else:
-                pathA = find_create_path(m_open, pathB_ids[-1], pathA_ids[0])
-                pathB = find_create_path(m_open, pathA_ids[-1], pathB_ids[0])
-    return pathA, pathB
-
 # Check for overlap between path IDs and contour IDs
-path1_ids = get_ids(path1, locator_open).astype(int)
-path2_ids = get_ids(path2, locator_open).astype(int)
-path3_ids = get_ids(path3, locator_open).astype(int)
-path4_ids = get_ids(path4, locator_open).astype(int)
-path6_ids = get_ids(path6, locator_open).astype(int)
-path7_ids = get_ids(path7, locator_open).astype(int)   
-path8a_ids = get_ids(path8a, locator_open).astype(int)                                                                                                                                                                                                                                                                                                                                          
-path8c_ids = get_ids(path8c, locator_open).astype(int)                                                                                                                                                                                                                                                                                                                                          
-# If the path shares any vertex with the contour, it's considered intersecting
-if paths_intersect(path2_ids, path7_ids):
-    print("Overlap detected between paths 1.")
-    path2, path7 = adjust_path(path2, path7, path2_ids, path7_ids, lipv_cont_ids)
-if paths_intersect(path4_ids, path8a_ids):
-    print("Overlap detected between paths 2.")
-    path4, path8a = adjust_path(path4, path8a, path4_ids, path8a_ids, lspv_cont_ids)
-if paths_intersect(path3_ids, path2_ids):
-    print("Overlap detected between paths 3.")
-    path2, path3 = adjust_path(path2, path3, path2_ids, path3_ids, lipv_cont_ids)
-if paths_intersect(path1_ids, path6_ids):
-    print("Overlap detected between paths 4.")
-    path1, path6 = adjust_path(path1, path6, path1_ids, path6_ids, ripv_cont_ids)
-if paths_intersect(path2_ids, path6_ids):
-    print("Overlap detected between paths 5.")
-    path2, path6 = adjust_path(path2, path6, path2_ids, path6_ids, ripv_cont_ids)
-if paths_intersect(path8a_ids, path8c_ids):
-    print("Overlap detected between paths 6.")
-    path8a, path8c = adjust_path(path8a, path8c, path8a_ids, path8c_ids, laa_cont_ids)
+path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c = check_and_adjust_paths(locator_open, path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c,
+                                                                            ripv_cont_ids, rspv_cont_ids, lipv_cont_ids, lspv_cont_ids, laa_cont_ids)
 
 writevtk(path1, os.path.join(fileroot, filenameroot + '_path1.vtk'))
 writevtk(path2, os.path.join(fileroot, filenameroot + '_path2.vtk'))
@@ -292,56 +196,17 @@ laa_s1 = laa_ids[0:int(np.where(laa_ids == vlaau_prop)[0])]
 laa_s2 = laa_ids[int(np.where(laa_ids == vlaau_prop)[0]): int(np.where(laa_ids == vlaad_prop)[0])]
 laa_s3 = laa_ids[int(np.where(laa_ids == vlaad_prop)[0]): laa_ids.size]
 
-def export_segment_as_vtp(mesh, segment_ids, filename):
-
-    segment_ids = np.asarray(segment_ids).astype(int)
-
-    # Create new points container
-    points = vtk.vtkPoints()
-    
-    # Create polyline cell
-    polyLine = vtk.vtkPolyLine()
-    polyLine.GetPointIds().SetNumberOfIds(len(segment_ids))
-
-    # Insert points in order
-    for i, pid in enumerate(segment_ids):
-        coord = mesh.GetPoint(int(pid))
-        points.InsertNextPoint(coord)
-        polyLine.GetPointIds().SetId(i, i)
-
-    # Create cell array
-    cells = vtk.vtkCellArray()
-    cells.InsertNextCell(polyLine)
-
-    # Create polydata
-    polyData = vtk.vtkPolyData()
-    polyData.SetPoints(points)
-    polyData.SetLines(cells)
-
-    # Write to file
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(polyData)
-    writer.Write()
-
-    print("Exported:", filename)
-
 if args.save_final_paths == True:
-    writevtk(path1_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path1_prop.vtk')
-    writevtk(path2_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path2_prop.vtk')
-    writevtk(path3_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path3_prop.vtk')
-    writevtk(path4_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path4_prop.vtk')
-    writevtk(path5_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path5_prop.vtk')
-    writevtk(path6_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path6_prop.vtk')
-    writevtk(path7_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path7_prop.vtk')
-    writevtk(path8a_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path8a_prop.vtk')
-    writevtk(path8b_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path8b_prop.vtk')
-    writevtk(path8c_clipped_prop, args.meshfile[0:len(args.meshfile)-19] + '_path8c_prop.vtk')
-    export_segment_as_vtp(m_open, rspv_s1_prop, args.meshfile[0:len(args.meshfile)-4] + '_rspv_s1.vtp')
-    export_segment_as_vtp(m_open, rspv_s2_prop, args.meshfile[0:len(args.meshfile)-4] + '_rspv_s2.vtp')
-    export_segment_as_vtp(m_open, rspv_s3_prop, args.meshfile[0:len(args.meshfile)-4] + '_rspv_s3.vtp')
-    export_segment_as_vtp(m_open, rspv_s4_prop, args.meshfile[0:len(args.meshfile)-4] + '_rspv_s4.vtp')
-
+    writevtk(path1_clipped_prop, os.path.join(fileroot, filenameroot + '_path1_prop.vtk'))
+    writevtk(path2_clipped_prop, os.path.join(fileroot, filenameroot + '_path2_prop.vtk'))
+    writevtk(path3_clipped_prop, os.path.join(fileroot, filenameroot + '_path3_prop.vtk'))
+    writevtk(path4_clipped_prop, os.path.join(fileroot, filenameroot + '_path4_prop.vtk'))
+    writevtk(path5_clipped_prop, os.path.join(fileroot, filenameroot + '_path5_prop.vtk'))
+    writevtk(path6_clipped_prop, os.path.join(fileroot, filenameroot + '_path6_prop.vtk'))
+    writevtk(path7_clipped_prop, os.path.join(fileroot, filenameroot + '_path7_prop.vtk'))
+    writevtk(path8a_clipped_prop, os.path.join(fileroot, filenameroot + '_path8a_prop.vtk'))
+    writevtk(path8b_clipped_prop, os.path.join(fileroot, filenameroot + '_path8b_prop.vtk'))
+    writevtk(path8c_clipped_prop, os.path.join(fileroot, filenameroot + '_path8c_prop.vtk'))
 
 ##################    Define segment constraint points (s1, s2, s3,..., s12)    ##################
 s1 = get_segment_ids_in_to_be_flat_mesh(path1_clipped_prop, locator_open, np.concatenate([ripv_s2_prop, ripv_s3_prop]), np.concatenate([rspv_s1_prop, rspv_s4_prop]))
@@ -354,8 +219,6 @@ s7 = get_segment_ids_in_to_be_flat_mesh(path7_clipped_prop, locator_open, mv_con
 s8a = get_segment_ids_in_to_be_flat_mesh(path8a_clipped_prop, locator_open, np.concatenate([laa_s2, laa_s3]), np.concatenate([lspv_s1_prop, lspv_s2_prop]))
 s8b = get_segment_ids_in_to_be_flat_mesh(path8b_clipped_prop, locator_open, mv_cont_ids, np.concatenate([laa_s1, laa_s2]))
 s8c = get_segment_ids_in_to_be_flat_mesh(path8c_clipped_prop, locator_open, np.concatenate([laa_s1, laa_s3]), np.concatenate([rspv_s2_prop, rspv_s3_prop]))
-
-
 
 # Concatenate all constraint segments: s1,s2,s3,s4,s5,s6,s7, s8a and s8b
 auxx = np.append(s1, s2)
@@ -398,87 +261,41 @@ print('Number of repeated constraints', np.where(counts1 > 1)[0])
 print('Number of repeated contour conditions', np.where(counts2 > 1)[0])
 print('Number of repeated constraints and conditions', np.where(counts3 > 1)[0])
 
+find_location_of_repeated_ids(np.where(counts3>1)[0], s1, s2, s3, s4, s5, s6, s7, s8a, s8b, s8c, mv_s1_prop, mv_s2_prop, mv_s3_prop, mv_s4_prop, 
+                            rspv_s1_prop, rspv_s2_prop, rspv_s3_prop, rspv_s4_prop, ripv_s1_prop, ripv_s2_prop, ripv_s3_prop, lipv_s1_prop, lipv_s2_prop, lipv_s3_prop, 
+                            lspv_s1_prop, lspv_s2_prop, lspv_s3_prop, laa_s1, laa_s2, laa_s3)
 
-overlap = np.where(counts3 > 1)[0]
-for oid in overlap:
-    print("ID:", oid)
-
-    # -------- Constraint segments --------
-    if oid in s1: print("  in constraint: s1")
-    if oid in s2: print("  in constraint: s2")
-    if oid in s3: print("  in constraint: s3")
-    if oid in s4: print("  in constraint: s4")
-    if oid in s5: print("  in constraint: s5")
-    if oid in s6: print("  in constraint: s6")
-    if oid in s7: print("  in constraint: s7")
-    if oid in s8a: print("  in constraint: s8a")
-    if oid in s8b: print("  in constraint: s8b")
-    if oid in s8c: print("  in constraint: s8c")
-
-    # -------- Mitral valve (MV) --------
-    if oid in mv_s1_prop: print("  in contour: mv_s1")
-    if oid in mv_s2_prop: print("  in contour: mv_s2")
-    if oid in mv_s3_prop: print("  in contour: mv_s3")
-    if oid in mv_s4_prop: print("  in contour: mv_s4")
-
-    # -------- RSPV --------
-    if oid in rspv_s1_prop: print("  in contour: rspv_s1")
-    if oid in rspv_s2_prop: print("  in contour: rspv_s2")
-    if oid in rspv_s3_prop: print("  in contour: rspv_s3")
-    if oid in rspv_s4_prop: print("  in contour: rspv_s4")
-
-    # -------- RIPV --------
-    if oid in ripv_s1_prop: print("  in contour: ripv_s1")
-    if oid in ripv_s2_prop: print("  in contour: ripv_s2")
-    if oid in ripv_s3_prop: print("  in contour: ripv_s3")
-
-    # -------- LIPV --------
-    if oid in lipv_s1_prop: print("  in contour: lipv_s1")
-    if oid in lipv_s2_prop: print("  in contour: lipv_s2")
-    if oid in lipv_s3_prop: print("  in contour: lipv_s3")
-
-    # -------- LSPV --------
-    if oid in lspv_s1_prop: print("  in contour: lspv_s1")
-    if oid in lspv_s2_prop: print("  in contour: lspv_s2")
-    if oid in lspv_s3_prop: print("  in contour: lspv_s3")
-
-    # -------- LAA --------
-    if oid in laa_s1: print("  in contour: laa_s1")
-    if oid in laa_s2: print("  in contour: laa_s2")
-    if oid in laa_s3: print("  in contour: laa_s3")
 # put together all PV and LAA segment sizes
-pv_laa_segment_lengths = np.zeros([5, 4])
-pv_laa_segment_lengths[0, 0] = rspv_s1_prop.size
-pv_laa_segment_lengths[0, 1] = rspv_s2_prop.size
-pv_laa_segment_lengths[0, 2] = rspv_s3_prop.size
-pv_laa_segment_lengths[0, 3] = rspv_s4_prop.size
-pv_laa_segment_lengths[1, 0] = ripv_s1_prop.size
-pv_laa_segment_lengths[1, 1] = ripv_s2_prop.size
-pv_laa_segment_lengths[1, 2] = ripv_s3_prop.size
-pv_laa_segment_lengths[2, 0] = lipv_s1_prop.size
-pv_laa_segment_lengths[2, 1] = lipv_s2_prop.size
-pv_laa_segment_lengths[2, 2] = lipv_s3_prop.size
-pv_laa_segment_lengths[3, 0] = lspv_s1_prop.size
-pv_laa_segment_lengths[3, 1] = lspv_s2_prop.size
-pv_laa_segment_lengths[3, 2] = lspv_s3_prop.size
-pv_laa_segment_lengths[4, 0] = laa_s1.size
-pv_laa_segment_lengths[4, 1] = laa_s2.size
-pv_laa_segment_lengths[4, 2] = laa_s3.size
-
-s9size = mv_s1_prop.size
-s10size = mv_s2_prop.size
-s11size = mv_s3_prop.size
-s12size = mv_s4_prop.size
+segment_lengths = np.zeros([6, 4])
+segment_lengths[0, 0] = rspv_s1_prop.size
+segment_lengths[0, 1] = rspv_s2_prop.size
+segment_lengths[0, 2] = rspv_s3_prop.size
+segment_lengths[0, 3] = rspv_s4_prop.size
+segment_lengths[1, 0] = ripv_s1_prop.size
+segment_lengths[1, 1] = ripv_s2_prop.size
+segment_lengths[1, 2] = ripv_s3_prop.size
+segment_lengths[2, 0] = lipv_s1_prop.size
+segment_lengths[2, 1] = lipv_s2_prop.size
+segment_lengths[2, 2] = lipv_s3_prop.size
+segment_lengths[3, 0] = lspv_s1_prop.size
+segment_lengths[3, 1] = lspv_s2_prop.size
+segment_lengths[3, 2] = lspv_s3_prop.size
+segment_lengths[4, 0] = laa_s1.size
+segment_lengths[4, 1] = laa_s2.size
+segment_lengths[4, 2] = laa_s3.size
+segment_lengths[5, 0] = mv_s1_prop.size
+segment_lengths[5, 1] = mv_s2_prop.size
+segment_lengths[5, 2] = mv_s3_prop.size
+segment_lengths[5, 3] = mv_s4_prop.size
 
 ##################    Create target (x0, y0) positions  according to the lengths of each segment    ##################
 # Separately constraints and contours
-
 x0_const, y0_const = define_constraints_positions(s1, s2, s3, s4, s5, s6, s7, s8a, s8b, s8c, v1l_x, v1l_y, v1d_x, v1d_y, v1r_x, v1r_y, v1u_x, v1u_y, v2l_x,
                                  v2l_y, v2r_x, v2r_y, v2u_x, v2u_y, v3r_x, v3r_y, v3u_x, v3u_y, v3l_x, v3l_y,
                                  v4r_x, v4r_y, v4u_x, v4u_y, v4d_x, v4d_y, vlaad_x, vlaad_y, vlaau_x, vlaau_y,vlaar_x, vlaar_y, p5_x,
                                  p5_y, p6_x, p6_y, p7_x, p7_y, p8_x, p8_y)
 
-x0_bound, y0_bound = define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_lspv, rhole_laa, xhole_center, yhole_center, laa_hole_center_x, laa_hole_center_y, s9size, s10size, s11size, s12size, pv_laa_segment_lengths.astype(int), t_v5_1, t_v5_2, t_v6, t_v7, t_v8, args)
+x0_bound, y0_bound = define_boundary_positions(rdisk, rhole_rspv, rhole_ripv, rhole_lipv, rhole_lspv, rhole_laa, xhole_center, yhole_center, laa_hole_center_x, laa_hole_center_y, segment_lengths.astype(int), t_v5_1, t_v5_2, t_v6, t_v7, t_v8, args)
 plt.plot(x0_bound, y0_bound, 'ro')
 plt.plot(x0_const, y0_const, 'bx')
 plt.title('2D template with boundary (red) and regional (blue) constraint points')
@@ -490,7 +307,6 @@ for point_x0_const, point_y0_const in zip(x0_const, y0_const):
     f.write(str(point_y0_const) + " ")
     f.write("\n")
 f.close()
-
 
 m_flat = flat_w_constraints(m_open, seq_contour_ids.astype(int), seq_constraints_ids.astype(int), x0_bound, y0_bound, x0_const, y0_const)
 m_final = flat(m_flat, seq_contour_ids.astype(int), x0_bound, y0_bound)   # Refine boundary
@@ -535,12 +351,12 @@ for i in range(1, nlines+1):
 f.close()
 
 # Read all lines and divide/cut mesh
-m_aux = set_piece_label_from_contours(m_open, rspv_cont_ids, ripv_cont_ids, lspv_cont_ids, lipv_cont_ids, laa_cont_ids, mv_cont_ids, line_textfile, to_be_flat_filename)
-writevtk(m_aux, to_be_flat_filename)
+m_aux = set_piece_label_from_contours(m_open, rspv_cont_ids, ripv_cont_ids, lspv_cont_ids, lipv_cont_ids, laa_cont_ids, mv_cont_ids, line_textfile, to_be_flat_path)
+writevtk(m_aux, to_be_flat_path)
 
 print('\nProjecting information...')
 transfer_all_scalar_arrays_by_point_id(m_open, m_final)
-f = open(args.meshfile[:-19] +"_regions.txt", "w")
+f = open(os.path.join(fileroot, filenameroot +"_regions.txt"), "w")
 for reg in vtk_to_numpy(m_aux.GetCellData().GetArray('region')):
     f.write(str(reg))
     f.write('\n')
@@ -551,7 +367,7 @@ m_final.GetCellData().AddArray(m_aux.GetCellData().GetArray('region'))
 #m_final.GetPointData().RemoveArray('autolabels')
 m_final.GetPointData().RemoveArray('hole')
 print('\nRemoving ad hoc scalar arrays: autolabels, pv, and hole')
-writevtk(m_final, m_out)
+writevtk(m_final, output_path)
 
 array_labels = np.zeros(m_whole.GetNumberOfCells())
 locator = vtk.vtkPointLocator()
@@ -575,23 +391,33 @@ for c in range(m_whole.GetNumberOfCells()):
 newarray = numpy_to_vtk(array_labels)
 newarray.SetName("region")
 m_whole.GetCellData().AddArray(newarray)
-writevtk(m_whole, args.meshfile[:-14] + "_regions.vtk")
+writevtk(m_whole, os.path.join(fileroot, filenameroot + "_regions.vtk"))
 
-from vedo import Plotter, build_lut, load
-import matplotlib
-vmesh = load(args.meshfile[:-14] + "_regions.vtk")
-plot = Plotter(offscreen=False)
-lut_table = []
-cmap_regions1 = matplotlib.cm.get_cmap('tab20')
+
 region_remap = {36: 12, 37: 7, 76: 11, 77: 10, 78: 9, 79: 8}
+
 regions = array_labels
+print(np.unique(regions))
 regions = np.array([region_remap.get(r, r) for r in regions], dtype=int)
+print(np.unique(regions))
 region_dict = {1:"Septal", 2:"Inferior", 3:"Lateral",  4:"Roof", 5:"Posterior", 6:"Anterior",  7:"LAA", 8:"LIPV", 9:"LSPV", 10:"RIPV", 11:"RSPV", 12:'Mitral Valve' }
-for i, regionname in enumerate(np.unique(regions)):    
-    lut_table.append((regionname, to_hex(cmap_regions1.colors[i]), 1, region_dict[regionname]))  
-lut = build_lut(lut_table)
-title = "Regions"
-vmesh.cmap(lut, list(array_labels), on="cells")
-vmesh.add_scalarbar3d(title="Regions", categories=lut_table)
-plot.add(vmesh)
-plot.show()
+
+
+plot_regions(m_whole, regions, region_dict)
+
+# from vedo import Plotter, build_lut, load
+# import matplotlib
+# vmesh = load(os.path.join(fileroot, filenameroot + "_regions.vtk"))
+# plot = Plotter(offscreen=False)
+# lut_table = []
+# cmap_regions1 = matplotlib.cm.get_cmap('tab20')
+
+# for i, regionname in enumerate(np.unique(regions)):    
+#     lut_table.append((regionname, to_hex(cmap_regions1.colors[i]), 1, region_dict[regionname]))  
+# print(lut_table)
+# lut = build_lut(lut_table)
+# title = "Regions"
+# vmesh.cmap(lut, regions.astype(int), on="cells")
+# vmesh.add_scalarbar3d(title="Regions", categories=lut_table)
+# plot.add(vmesh)
+# plot.show()

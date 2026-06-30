@@ -95,7 +95,7 @@ else:
                     gtlabels[i]=37
         pointspd.GetPointData().AddArray(numpy_to_vtk(gtlabels))
         writevtp(pointspd, seedsfile)
-        print('Seeds already selected, using those ones. To compute new seeds, delete file with suffix clip_seeds.vtp')
+        print('Seeds already selected, using those ones. To compute new seeds, delete file with suffix clip_seeds.vtp') 
 
 seeds_to_csv(seedsfile, 'GTLabels', [77, 76, 78, 79, 37], outseedsfile)
 
@@ -149,7 +149,7 @@ for p in range(surface.GetNumberOfPoints()):
 newarray = numpy_to_vtk(array_labels)
 newarray.SetName("combined")
 surface.GetPointData().AddArray(newarray)
-writevtk(surface, fileroot + "\\" + filenameroot + "_with_pv.vtk") 
+writevtk(surface, os.path.join(fileroot, filenameroot + "_with_pv.vtk"))
 
 array_labels = np.zeros(surface.GetNumberOfPoints())
 locator = vtk.vtkPointLocator()

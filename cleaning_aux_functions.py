@@ -4,7 +4,9 @@ import numpy as np
 import argparse
 import sys
 from aux_functions import *
-
+from vedo import write
+import re
+import pymeshfix
 """
 There are conflicting version issues with vmtk, vtk, and pyvista. Mesh processing such as cleaning degenerate and non manifold edges is not embedded 
 in pure vtk. Pyvista is a wrapper around vtk and has more advanced mesh processing capabilities. 
@@ -13,6 +15,104 @@ conversion as it wraps around vtk.
 
 TTK is another interesting option to explore but it's way more complex and requires a lot of dependencies.
 """
+
+class Converter:
+    def __init__(self, inp, out=None, copy_lines=False):
+        if out is None:
+            out = inp
+        self.inp = inp
+        self.out = out
+        self.copy_lines = copy_lines  # if line cells should be copied
+        self.original = None
+        self.lines = None
+        self.polys = None
+        self.cells = None
+
+    def read(self):
+        with open(self.inp, "r") as f:
+            self.original = f.read().split("\n")
+        lines_original = list(map(lambda x: x.strip().split(), self.original))
+
+        for i, l in enumerate(self.original):
+            if "LINES" in l:
+                self.lines = NewContent("LINES", lines_original, i)
+            elif "POLYGONS" in l:
+                self.polys = NewContent("POLYGONS", lines_original, i)
+            elif "CELLS" in l:
+                self.cells = NewContent("CELLS", lines_original, i)
+
+    def replace(self):
+        if self.polys is not None:
+            self.original = self.polys.replace(self.original)
+        if self.cells is not None:
+            self.original = self.cells.replace(self.original)
+        if self.lines is not None:
+            self.original = self.lines.replace(self.original, replace=self.copy_lines)
+
+    def write(self):
+        with open(self.out, "w") as f:
+            f.write("\n".join(self.original))
+
+        change_vtk_version(self.out, 4.2)
+
+
+class NewContent:
+    def __init__(self, kw, content, ln):
+        self.kw = kw
+        self.ln = ln
+        self.name = content[ln][0]
+        self.no = int(content[ln][1])
+        self.nc = int(content[ln][2])
+
+        flat_list = [item for line in content[ln + 2 :] for item in line]
+        flat_list = list(filter("".__ne__, flat_list))
+
+        self.offsets = list(map(int, flat_list[0 : self.no]))
+        self.connectivity = list(
+            map(int, flat_list[self.no + 2 : self.no + 2 + self.nc])
+        )
+
+    @property
+    def remove(self):
+        return self.ln, self.ln + math.ceil(self.no / 9) + math.ceil(self.nc / 9) + 3
+
+    def replace(self, lines, replace=True):
+        nb_cells = self.no - 1
+        new_content = []
+        if replace:
+            new_content = [f"{self.kw} {nb_cells} {nb_cells + self.nc}"]
+            for i in range(nb_cells):
+                nb_points = self.offsets[i + 1] - self.offsets[i]
+                ids = self.connectivity[self.offsets[i] : self.offsets[i + 1]]
+                new_content.append(f"{nb_points} {' '.join(map(str, ids))}")
+
+        lines_to_keep = lines
+        a, b = self.remove
+        del lines_to_keep[a:b]
+        lines_to_keep[a:a] = new_content
+        lines_to_keep = list(filter("".__ne__, lines_to_keep))
+        return lines_to_keep
+
+def convert_to_flattening_vtk_version(mesh_fname: str, save_fname: str, copy_lines: bool = False):
+    conv = Converter(mesh_fname, save_fname, copy_lines)
+    conv.read()
+    conv.replace()
+    conv.write()
+
+def change_vtk_version(filename: str, v: float = 5.1):
+    with open(filename, "r") as f:
+        x = f.read()
+    x = re.sub(r"(# vtk DataFile Version) (.+)", f"\\1 {v}", x)
+    with open(filename, "w") as f:
+        f.write(x)
+
+def to_vtk(main, file, mesh):   
+    write(mesh,main + "\\"+ file +  "_mesh_wrong_format.vtk", binary=False)
+    convert_to_flattening_vtk_version(main+ "\\" + file +  "_mesh_wrong_format.vtk", main+ "\\" +  file + ".vtk")
+
+def clean_mesh(vertices, faces):
+    vclean, fclean = pymeshfix.clean_from_arrays(vertices, faces)
+    return vclean, fclean
 
 def remove_non_manifold_pyvista(input_filepath, output_filepath):
     """
@@ -26,13 +126,8 @@ def remove_non_manifold_pyvista(input_filepath, output_filepath):
     - cleaned pyvista.PolyData object
     """
 
-    # Load the mesh
     mesh = pv.read(input_filepath)
-
-    # Remove non-manifold edges
     cleaned_mesh = mesh.clean()
-
-    # Save the cleaned mesh
     cleaned_mesh.save(output_filepath)
 
     return cleaned_mesh
@@ -125,42 +220,16 @@ def extract_cells_from_non_manifold_edges(input_filepath):
         edge_line = non_manifold_edges.extract_cells(edgeid)
 
         # Get point indices of this edge
-        # point_ids = edge_line.point_data["vtkOriginalPointIds"]
-        # print("Point ids: ", point_ids)
         point_ids = map_edge_points_to_original_mesh(edge_line, mesh)
         print(f"Edge {edgeid} mapped original point IDs: {point_ids}")
 
         # For each point, find connected cells in the original mesh
-
-        #! Keep that for later -- If we need neighbors of the non manifold edges, this is the way to go !
-        # for point_id in point_ids:
-        #     # Wrap point_id in a list for PyVista
-        #     candidate_cells = mesh.point_cell_ids(point_id)
-
-        #     for cell_id in candidate_cells:
-        #         neighbors = mesh.cell_neighbors_levels(
-        #             ind=cell_id,
-        #             connections="edges",
-        #             n_levels=1
-        #         )
-        #         # Flatten neighbors (list of lists) to a flat list
-        #         flattened_neighbors = [item for sublist in neighbors for item in sublist]
-        #         if neighbors:
-        #             print("There are neighbors, here is the list, ", flattened_neighbors)
-        #             collected_cell_ids.update(flattened_neighbors)
-
         for cell_id in range(mesh.n_cells):
             pids = mesh.faces[4*cell_id+1:4*cell_id+4]  # Extract point IDs for the cell
             for pid in pids:
                 if pid in point_ids:
                     collected_cell_ids.add(cell_id)
-        # for point_id in point_ids:
-        #     candidate_cells = mesh.point_cells(point_id)
-        #     collected_cell_ids.update(candidate_cells)
 
-
-    # for cell_id in collected_cell_ids:
-    #     print(f"Cell ID: {cell_id}")
     collected_cell_ids = list(collected_cell_ids)
 
     print(f"Found {len(collected_cell_ids)} cells connected to non-manifold edges.")
@@ -231,7 +300,6 @@ def remove_problematic_cells_and_save(input_filepath, problematic_cell_ids, outp
 
     if problematic_cell_ids is not None: 
 
-
         # Step 2: Create a mask for cells to keep
         n_cells = mesh.n_cells
         cell_mask = np.ones(n_cells, dtype=bool)
@@ -240,13 +308,11 @@ def remove_problematic_cells_and_save(input_filepath, problematic_cell_ids, outp
         # Step 3: Extract the clean mesh
         cleaned_mesh = mesh.extract_cells(cell_mask)
 
-        
-
-        # Step 5: If unstructured grid, convert to PolyData
+        # Step 4: If unstructured grid, convert to PolyData
         if isinstance(cleaned_mesh, pv.UnstructuredGrid):
             print("ℹ Converting UnstructuredGrid to PolyData before hole filling.")
             cleaned_mesh = cleaned_mesh.extract_surface()
-        # Step 4: Clean degenerate elements
+        # Step 5: Clean degenerate elements
         cleaned_mesh = cleaned_mesh.clean()
         # Step 6: (Optional) Fill holes
         if fill_holes:

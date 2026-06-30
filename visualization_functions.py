@@ -1,6 +1,9 @@
 import vtk
 import numpy as np
 import math
+from matplotlib import cm
+from matplotlib.colors import to_rgb
+
 def euclideandistance(point1, point2):
     return math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2 + (point1[2] - point2[2])**2)
 
@@ -622,3 +625,101 @@ def visualise_body_dimensions_vtk(
     render_window.Render()
     interactor.Start()
 
+def plot_regions(
+    polydata,
+    regions,
+    region_dict=None,
+    cmap_name="tab20",
+    window_size=(1200, 1000),
+    background=(1, 1, 1),
+):
+
+    regions = np.asarray(regions).astype(int)
+
+    region_array = vtk.vtkIntArray()
+    region_array.SetName("Regions")
+
+    for r in regions:
+        region_array.InsertNextValue(int(r))
+
+    polydata.GetCellData().SetScalars(region_array)
+
+    unique_regions = sorted(np.unique(regions))
+
+    lut = vtk.vtkLookupTable()
+    lut.SetNumberOfTableValues(len(unique_regions) )
+    lut.Build()
+
+    cmap = cm.get_cmap(cmap_name)
+    annotations = vtk.vtkDoubleArray()
+    annotations.SetNumberOfValues(len(unique_regions))
+
+    for i, region in enumerate(unique_regions):
+
+        rgb = cmap(i % cmap.N)[:3]
+
+        lut.SetTableValue(
+            int(region),
+            rgb[0],
+            rgb[1],
+            rgb[2],
+            1.0
+        )
+
+        # Add annotation for legend labels
+        if region_dict is not None:
+            lut.SetAnnotation(
+                float(region),
+                region_dict.get(region, str(region))
+            )
+        else:
+            lut.SetAnnotation(
+                float(region),
+                str(region)
+            )
+
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(polydata)
+    mapper.SetLookupTable(lut)
+    mapper.SetScalarModeToUseCellData()
+    # mapper.SetScalarRange(
+    #     1,
+    #    len(unique_regions) + 0.5
+    # )
+
+    actor = vtk.vtkActor()
+    actor.SetMapper(mapper)
+
+    scalar_bar = vtk.vtkScalarBarActor()
+    scalar_bar.SetLookupTable(lut)
+    #scalar_bar.SetTitle("Regions")
+    scalar_bar.DrawAnnotationsOn()
+    scalar_bar.SetNumberOfLabels(0)
+    scalar_bar.SetOrientationToVertical()
+
+    scalar_bar.SetTextPad(10)
+    scalar_bar.SetAnnotationTextScaling(False)
+    label_prop = scalar_bar.GetAnnotationTextProperty()
+
+    label_prop.SetColor(0, 0, 0)
+
+    label_prop.SetFontSize(16)
+
+    label_prop.BoldOff()
+
+    #scalar_bar.GetTitleTextProperty().SetColor(0,0,0)
+
+    renderer = vtk.vtkRenderer()
+    renderer.AddActor(actor)
+    renderer.AddActor2D(scalar_bar)
+    renderer.SetBackground(*background)
+
+    render_window = vtk.vtkRenderWindow()
+    render_window.AddRenderer(renderer)
+    render_window.SetSize(*window_size)
+
+    interactor = vtk.vtkRenderWindowInteractor()
+    interactor.SetRenderWindow(render_window)
+
+    render_window.Render()
+    interactor.Start()
