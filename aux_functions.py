@@ -3,7 +3,7 @@ import math
 import numpy as np
 from visualization_functions import *
 from vtk.util.numpy_support import numpy_to_vtk, vtk_to_numpy
-from scipy.spatial.distance import cdist
+from scipy.spatial.distance import pdist, squareform, cdist
 import scipy.sparse.linalg as linalg_sp
 from scipy.sparse import hstack, coo_matrix, dia_matrix, vstack,  csc_matrix
 import collections
@@ -428,7 +428,7 @@ def find_create_path_contours(mesh, c1, c2, c3=[]):
 
     return best_path
 
-def update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, index_A, index_A_cont, index_B, index_B_cont):
+def update_same_endpoint(m_open, locator_open, pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, index_A, index_A_cont, index_B, index_B_cont):
     new_id = int(np.where(common_cont_ids == pathA_ids[index_A_cont])[0])+1
     pathA_temp = find_create_path(m_open, common_cont_ids[new_id], pathA_ids[index_A])
     pathA_ids_temp = get_ids(pathA_temp, locator_open).astype(int)
@@ -439,36 +439,36 @@ def update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, in
         pathA = pathA_temp
     return pathA, pathB
         
-def adjust_path(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids):
+def adjust_path(m_open, locator_open, pathA, pathB, pathA_ids, pathB_ids, common_cont_ids):
     if pathA_ids[0] in common_cont_ids:
         if pathB_ids[0] in common_cont_ids:
             if pathA_ids[0] == pathB_ids[0]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -1, 0)
+                pathA, pathB = update_same_endpoint(m_open, locator_open, pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -1, 0)
             else:
                 pathA = find_create_path(m_open, pathA_ids[-1], pathB_ids[0])
                 pathB = find_create_path(m_open, pathB_ids[-1], pathA_ids[0])
         elif pathB_ids[-1] in common_cont_ids:
             if pathA_ids[0] == pathB_ids[-1]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -0, -1)
+                pathA, pathB = update_same_endpoint(m_open, locator_open, pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, -1, 0, -0, -1)
             else:
                 pathA = find_create_path(m_open, pathA_ids[-1], pathB_ids[-1])
                 pathB = find_create_path(m_open, pathA_ids[0], pathB_ids[0])
     elif pathA_ids[-1] in common_cont_ids:
         if pathB_ids[0] in common_cont_ids:
             if pathA_ids[-1] == pathB_ids[0]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, -1, 0)
+                pathA, pathB = update_same_endpoint(m_open, locator_open, pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, -1, 0)
             else:
                 pathA = find_create_path(m_open, pathB_ids[0], pathA_ids[0])
                 pathB = find_create_path(m_open, pathB_ids[-1], pathA_ids[-1])
         elif pathB_ids[-1] in common_cont_ids:
             if pathA_ids[-1] == pathB_ids[-1]:
-                pathA, pathB = update_same_endpoint(pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, 0, -1)
+                pathA, pathB = update_same_endpoint(m_open, locator_open, pathA, pathB, pathA_ids, pathB_ids, common_cont_ids, 0, -1, 0, -1)
             else:
                 pathA = find_create_path(m_open, pathB_ids[-1], pathA_ids[0])
                 pathB = find_create_path(m_open, pathA_ids[-1], pathB_ids[0])
     return pathA, pathB
 
-def check_and_adjust_paths(locator_open, path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c,
+def check_and_adjust_paths(m_open, locator_open, path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c,
                             ripv_cont_ids, rspv_cont_ids, lipv_cont_ids, lspv_cont_ids, laa_cont_ids):
     path1_ids = get_ids(path1, locator_open).astype(int)
     path2_ids = get_ids(path2, locator_open).astype(int)
@@ -483,55 +483,55 @@ def check_and_adjust_paths(locator_open, path1, path2, path3, path4, path5, path
 
     if paths_intersect(path1_ids, path2_ids):
         print("Overlap detected between paths 1 and 2, which have the RIPV as common contour.")
-        path1, path2 = adjust_path(path1, path2, path1_ids, path2_ids, ripv_cont_ids)
+        path1, path2 = adjust_path(m_open, locator_open, path1, path2, path1_ids, path2_ids, ripv_cont_ids)
     if paths_intersect(path1_ids, path4_ids):
         print("Overlap detected between paths 1 and 4, which have the RSPV as common contour.")
-        path1, path4 = adjust_path(path1, path4, path1_ids, path4_ids, rspv_cont_ids)
+        path1, path4 = adjust_path(m_open, locator_open, path1, path4, path1_ids, path4_ids, rspv_cont_ids)
     if paths_intersect(path1_ids, path5_ids):
         print("Overlap detected between paths 1 and 5, which have the RSPV as common contour.")
-        path1, path5 = adjust_path(path1, path5, path1_ids, path5_ids, rspv_cont_ids)
+        path1, path5 = adjust_path(m_open, locator_open, path1, path5, path1_ids, path5_ids, rspv_cont_ids)
     if paths_intersect(path1_ids, path6_ids):
         print("Overlap detected between paths 1 and 6, which have the RIPV as common contour.")
-        path1, path6 = adjust_path(path1, path6, path1_ids, path6_ids, ripv_cont_ids)
+        path1, path6 = adjust_path(m_open, locator_open, path1, path6, path1_ids, path6_ids, ripv_cont_ids)
     if paths_intersect(path2_ids, path3_ids):
         print("Overlap detected between paths 2 and 3, which have the LIPV as common contour.")
-        path2, path3 = adjust_path(path2, path3, path2_ids, path3_ids, lipv_cont_ids)
+        path2, path3 = adjust_path(m_open, locator_open, path2, path3, path2_ids, path3_ids, lipv_cont_ids)
     if paths_intersect(path2_ids, path6_ids):
         print("Overlap detected between paths 2 and 6, which have the RIPV as common contour.")
-        path2, path6 = adjust_path(path2, path6, path2_ids, path6_ids, ripv_cont_ids)
+        path2, path6 = adjust_path(m_open, locator_open, path2, path6, path2_ids, path6_ids, ripv_cont_ids)
     if paths_intersect(path2_ids, path7_ids):
         print("Overlap detected between paths 2 and 7, which have the LIPV as common contour.")
-        path2, path7 = adjust_path(path2, path7, path2_ids, path7_ids, lipv_cont_ids)
+        path2, path7 = adjust_path(m_open, locator_open, path2, path7, path2_ids, path7_ids, lipv_cont_ids)
     if paths_intersect(path3_ids, path4_ids):
         print("Overlap detected between paths 3 and 4, which have the LSPV as common contour.")
-        path3, path4 = adjust_path(path3, path4, path3_ids, path4_ids, lspv_cont_ids)
+        path3, path4 = adjust_path(m_open, locator_open, path3, path4, path3_ids, path4_ids, lspv_cont_ids)
     if paths_intersect(path3_ids, path7_ids):
         print("Overlap detected between paths 3 and 7, which have the LIPV as common contour.")
-        path3, path7 = adjust_path(path3, path7, path3_ids, path7_ids, lipv_cont_ids)
+        path3, path7 = adjust_path(m_open, locator_open, path3, path7, path3_ids, path7_ids, lipv_cont_ids)
     if paths_intersect(path3_ids, path8a_ids):
         print("Overlap detected between paths 3 and 8a, which have the LSPV as common contour.")
-        path3, path8a = adjust_path(path3, path8a, path3_ids, path8a_ids, lspv_cont_ids)
+        path3, path8a = adjust_path(m_open, locator_open, path3, path8a, path3_ids, path8a_ids, lspv_cont_ids)
     if paths_intersect(path4_ids, path5_ids):
         print("Overlap detected between paths 4 and 5, which have the RSPV as common contour.")
-        path4, path5 = adjust_path(path4, path5, path4_ids, path5_ids, rspv_cont_ids)
+        path4, path5 = adjust_path(m_open, locator_open, path4, path5, path4_ids, path5_ids, rspv_cont_ids)
     if paths_intersect(path4_ids, path8a_ids):
         print("Overlap detected between paths 4 and 8a, which have the LSPV as common contour.")
-        path4, path8a = adjust_path(path4, path8a, path4_ids, path8a_ids, lspv_cont_ids)
+        path4, path8a = adjust_path(m_open, locator_open, path4, path8a, path4_ids, path8a_ids, lspv_cont_ids)
     if paths_intersect(path4_ids, path8c_ids):
         print("Overlap detected between paths 4 and 8c, which have the RSPV as common contour.")
-        path4, path8c = adjust_path(path4, path8c, path4_ids, path8c_ids, rspv_cont_ids)
+        path4, path8c = adjust_path(m_open, locator_open, path4, path8c, path4_ids, path8c_ids, rspv_cont_ids)
     if paths_intersect(path5_ids, path8c_ids):
         print("Overlap detected between paths 5 and 8c, which have the RSPV as common contour.")
-        path5, path8c = adjust_path(path5, path8c, path5_ids, path8c_ids, rspv_cont_ids)
+        path5, path8c = adjust_path(m_open, locator_open, path5, path8c, path5_ids, path8c_ids, rspv_cont_ids)
     if paths_intersect(path8a_ids, path8b_ids):
         print("Overlap detected between paths 8a and 8b, which have the LAA as common contour.")
-        path8a, path8b = adjust_path(path8a, path8b, path8a_ids, path8b_ids, laa_cont_ids)
+        path8a, path8b = adjust_path(m_open, locator_open, path8a, path8b, path8a_ids, path8b_ids, laa_cont_ids)
     if paths_intersect(path8a_ids, path8c_ids):
         print("Overlap detected between paths 8a and 8c, which have the LAA as common contour.")
-        path8a, path8c = adjust_path(path8a, path8c, path8a_ids, path8c_ids, laa_cont_ids)
+        path8a, path8c = adjust_path(m_open, locator_open, path8a, path8c, path8a_ids, path8c_ids, laa_cont_ids)
     if paths_intersect(path8b_ids, path8c_ids):
         print("Overlap detected between paths 8b and 8c, which have the LAA as common contour.")
-        path8b, path8c = adjust_path(path8b, path8c, path8b_ids, path8c_ids, laa_cont_ids)
+        path8b, path8c = adjust_path(m_open, locator_open, path8b, path8c, path8b_ids, path8c_ids, laa_cont_ids)
     
     return path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c
 
@@ -1098,8 +1098,7 @@ def get_rspv_segments_ids(cont_rspv, locator_open, v1l, v1d, v1r,v1u, propn_rspv
         # maintain the v1l as the first one (after the flip is the last one)
         flipped = np.append(aux[aux.size - 1], aux[0:aux.size - 1])
         rspv_ids = flipped.astype(int)
-    print("Positions of v1l, v1d, v1r, v1u", int(np.where(rspv_ids == v1l)[0]),
-          int(np.where(rspv_ids == v1d)[0]), int(np.where(rspv_ids == v1r)[0]), int(np.where(rspv_ids == v1u)[0]))
+
     rspv_s1 = rspv_ids[0:int(np.where(rspv_ids == v1l)[0])]
     rspv_s2 = rspv_ids[int(np.where(rspv_ids == v1l)[0]): int(np.where(rspv_ids == v1u)[0])]
     rspv_s3 = rspv_ids[int(np.where(rspv_ids == v1u)[0]): int(np.where(rspv_ids == v1r)[0])]
@@ -1120,13 +1119,10 @@ def get_rspv_segments_ids(cont_rspv, locator_open, v1l, v1d, v1r,v1u, propn_rspv
     
     new_s3_size = rspv_s3.size - rspv_s2_offset   # initial minus points now given to s1
     rspv_s3_offset = np.floor((s3_prop_length - new_s3_size)/2)
-    print(int(rspv_s1_prop.size + rspv_s2_prop.size + new_s3_size + rspv_s3_offset))
     v1r_prop = rspv_ids[int(rspv_s1_prop.size + rspv_s2_prop.size + new_s3_size + rspv_s3_offset)]
     rspv_s3_prop = rspv_ids[int(rspv_s1.size + rspv_s1_offset + new_s2_size + rspv_s2_offset): int(rspv_s1_prop.size + rspv_s2_prop.size + new_s3_size + rspv_s3_offset)]
     rspv_s4_prop = rspv_ids[int(rspv_s1_prop.size + rspv_s2_prop.size + new_s3_size + rspv_s3_offset): rspv_ids.size]
 
-    print("Positions of v1l, v1d, v1r, v1u", int(np.where(rspv_ids == v1l_prop)[0]),
-          int(np.where(rspv_ids == v1d_prop)[0]), int(np.where(rspv_ids == v1r_prop)[0]), int(np.where(rspv_ids == v1u_prop)[0]))
     print('RSPV original lengths', rspv_s1.size, rspv_s2.size, rspv_s3.size, rspv_s4.size)
     print('Proportional lengths', rspv_s1_prop.size, rspv_s2_prop.size, rspv_s3_prop.size, rspv_s4_prop.size)
     return rspv_ids, rspv_s1_prop, rspv_s2_prop, rspv_s3_prop,rspv_s4_prop, v1l_prop, v1d_prop, v1r_prop, v1u_prop
@@ -1205,9 +1201,6 @@ def get_lipv_segments_ids(cont_lipv, locator_open, v3r, v3u, v3l, propn_lipv_s1,
     lipv_s3_prop = lipv_ids[int(lipv_s1.size + lipv_s1_offset + new_s2_size + lipv_s2_offset): lipv_ids.size]
     print('LIPV original lengths', lipv_s1.size, lipv_s2.size, lipv_s3.size)
     print('Proportional lengths', lipv_s1_prop.size, lipv_s2_prop.size, lipv_s3_prop.size)
-    print('LIPV v3r, v3u, v3l', v3r_prop, v3u_prop, v3l_prop)
-    print("Positions of v3r, v3u, v3l", int(np.where(lipv_ids == v3r_prop)[0]),
-          int(np.where(lipv_ids == v3u_prop)[0]), int(np.where(lipv_ids == v3l_prop)[0]))
     return lipv_ids, lipv_s1_prop, lipv_s2_prop, lipv_s3_prop, v3r_prop, v3u_prop, v3l_prop
 
 def get_lspv_segments_ids(cont_lspv, locator_open, v4r, v4u, v4d, propn_lspv_s1, propn_lspv_s2, propn_lspv_s3):
@@ -1282,8 +1275,7 @@ def get_laa_segments_ids(cont_laa, locator_open, vlaau, vlaad, vlaar, propn_laa_
     vlaad_prop = laa_ids[int(laa_s1_prop.size + new_s2_size + laa_s2_offset)]
     laa_s2_prop = laa_ids[int(laa_s1.size + laa_s1_offset):int(laa_s1.size + laa_s1_offset + new_s2_size + laa_s2_offset)]
     laa_s3_prop = laa_ids[int(laa_s1.size + laa_s1_offset + new_s2_size + laa_s2_offset): laa_ids.size]
-    print("Positions of vlaau, vlaad, vlaar in laa_ids", int(np.where(laa_ids == vlaau_prop)[0]),
-          int(np.where(laa_ids == vlaad_prop)[0]), int(np.where(laa_ids == vlaar_prop)[0]))
+
     print('LAA Original lengths', laa_s1.size, laa_s2.size, laa_s3.size)
     print('Proportional lengths', laa_s1_prop.size, laa_s2_prop.size, laa_s3_prop.size)
     return laa_ids, laa_s1_prop, laa_s2_prop, laa_s3_prop, vlaau_prop, vlaad_prop, vlaar_prop
@@ -1330,7 +1322,7 @@ def get_mv_segments_ids(cont_mv, locator_open,
     s2_prop_length = round(propn_mv_s2 * len(mv_ids))
     s3_prop_length = round(propn_mv_s3 * len(mv_ids))
     s4_prop_length = round(propn_mv_s4 * len(mv_ids))
-    print('MV segment desired lengths:', s1_prop_length, s2_prop_length, s3_prop_length, s4_prop_length)
+
     vm4_prop = vm4  # reference
     mv_s4_offset = round((s4_prop_length - mv_s4.size) / 2)
     vm1_prop = mv_ids[int(mv_s4.size + mv_s4_offset)]
@@ -1347,8 +1339,6 @@ def get_mv_segments_ids(cont_mv, locator_open,
     mv_s2_prop = mv_ids[int(mv_s4_prop.size + mv_s1_prop.size):int(mv_s4_prop.size + mv_s1_prop.size + new_s2_size + mv_s2_offset)]
 
     mv_s3_prop = mv_ids[int(mv_s4_prop.size + mv_s1_prop.size + mv_s2_prop.size): mv_ids.size]
-    print('MV Original lengths', mv_s1.size, mv_s2.size, mv_s3.size, mv_s4.size)
-    print('Proportional lengths', mv_s1_prop.size, mv_s2_prop.size, mv_s3_prop.size, mv_s4_prop.size)
 
     vm4_prop = vm4  # reference
     vm1_prop = mv_ids[s4_prop_length]

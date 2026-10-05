@@ -235,7 +235,6 @@ def extract_cells_from_non_manifold_edges(input_filepath):
     print(f"Found {len(collected_cell_ids)} cells connected to non-manifold edges.")
 
     # Extract these cells from the original mesh
-    print(np.array(collected_cell_ids).flatten())
     problematic_faces = mesh.extract_cells(np.array(collected_cell_ids).flatten())
 
     return problematic_faces, collected_cell_ids

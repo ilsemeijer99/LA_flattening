@@ -125,7 +125,7 @@ path8b = find_create_path_contours(m_open, mv_cont_ids, laa_cont_ids)
 path8c = find_create_path_contours(m_open, laa_cont_ids, rspv_cont_ids)    
 
 # Check for overlap between path IDs and contour IDs
-path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c = check_and_adjust_paths(locator_open, path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c,
+path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c = check_and_adjust_paths(m_open, locator_open, path1, path2, path3, path4, path5, path6, path7, path8a, path8b, path8c,
                                                                             ripv_cont_ids, rspv_cont_ids, lipv_cont_ids, lspv_cont_ids, laa_cont_ids)
 
 writevtk(path1, os.path.join(fileroot, filenameroot + '_path1.vtk'))
@@ -393,31 +393,7 @@ newarray.SetName("region")
 m_whole.GetCellData().AddArray(newarray)
 writevtk(m_whole, os.path.join(fileroot, filenameroot + "_regions.vtk"))
 
-
-region_remap = {36: 12, 37: 7, 76: 11, 77: 10, 78: 9, 79: 8}
-
-regions = array_labels
-print(np.unique(regions))
-regions = np.array([region_remap.get(r, r) for r in regions], dtype=int)
-print(np.unique(regions))
-region_dict = {1:"Septal", 2:"Inferior", 3:"Lateral",  4:"Roof", 5:"Posterior", 6:"Anterior",  7:"LAA", 8:"LIPV", 9:"LSPV", 10:"RIPV", 11:"RSPV", 12:'Mitral Valve' }
-
-
+region_remap = {1:0, 2:1, 3:2, 4:3, 5:4, 6:5, 36: 11, 37: 6, 76: 10, 77: 9, 78: 8, 79: 7}
+regions = np.array([region_remap.get(r, r) for r in array_labels], dtype=int)
+region_dict = {0:"Septal", 1:"Inferior", 2:"Lateral",  3:"Anterior", 4:"Posterior", 5:"Roof",  6:"LAA", 7:"LIPV", 8:"LSPV", 9:"RIPV", 10:"RSPV", 11:'Mitral Valve' }
 plot_regions(m_whole, regions, region_dict)
-
-# from vedo import Plotter, build_lut, load
-# import matplotlib
-# vmesh = load(os.path.join(fileroot, filenameroot + "_regions.vtk"))
-# plot = Plotter(offscreen=False)
-# lut_table = []
-# cmap_regions1 = matplotlib.cm.get_cmap('tab20')
-
-# for i, regionname in enumerate(np.unique(regions)):    
-#     lut_table.append((regionname, to_hex(cmap_regions1.colors[i]), 1, region_dict[regionname]))  
-# print(lut_table)
-# lut = build_lut(lut_table)
-# title = "Regions"
-# vmesh.cmap(lut, regions.astype(int), on="cells")
-# vmesh.add_scalarbar3d(title="Regions", categories=lut_table)
-# plot.add(vmesh)
-# plot.show()

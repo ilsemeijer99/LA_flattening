@@ -46,7 +46,7 @@ parser.add_argument('--skippointsfactor', type=float, default=0.01, help='Percen
 parser.add_argument('--highslope', type=float, default=1.2, help='Above this slope we start counting')
 parser.add_argument('--bumpcriterion', type=float, default=0.05, help='Ostium if slope higher than highslope and above bump criterion')
 parser.add_argument('--pvends', type=int, default=1, help='Enforce the centerline to reach the end boundary of the surface.')
-parser.add_argument('--vis', type=int, default=1, help='Set to 1 to visualise clipping results overlaid with original mesh')
+parser.add_argument('--vis', type=int, default=2, help='Set to 1 to visualise all intermediate results, set to 2 to visualize most important intermediate results')
 parser.add_argument('--save', type=int, default=0, help='Set to 0 to remove intermediate results (centerlines, clippoints, etc.)')
 parser.add_argument('--change_seeds', type=str, nargs="+", default=[], help="list of seeds to repick")
 parser.add_argument('--eams', action='store_true', help='Mesh was obtained from eam instead of imaging')
@@ -105,7 +105,7 @@ pv_LAA_centerlines(args.meshfile, outseedsfile, outfile, args.pvends)
 
 # label PVs automatically
 outfile = os.path.join(fileroot, filenameroot + '_')
-clip_veins_sections_and_LAA(args.meshfile, outfile, args.clspacing, args.maxslope, args.skippointsfactor, args.highslope, args.bumpcriterion, args.eams)
+clip_veins_sections_and_LAA(args.meshfile, outfile, args.clspacing, args.maxslope, args.skippointsfactor, args.highslope, args.bumpcriterion, args.eams, seedsfile)
 
 # clip PV end points
 sufixfile = os.path.join(fileroot, filenameroot + '_')
@@ -132,7 +132,7 @@ max_hole_size = 4  # empirical, be careful to do not close pv ostiums, check vis
 stdmesh_closed = fillholes(stdmesh, max_hole_size)
 print('\n')
 transfer_all_scalar_arrays(surface, stdmesh_closed)
-if args.vis > 0:
+if args.vis >= 1:
     visualise_default(stdmesh_closed, surface, 'STD mesh', 'autolabels', 36, 79, readvtp(seedsfile))
 writevtk(stdmesh_closed, os.path.join(fileroot, filenameroot + '_clipped.vtk'))
 
@@ -174,8 +174,8 @@ o_file = os.path.join(fileroot, filenameroot + '_clipped_mitral')
 if args.mv_seed:
     surfaceclipped = find_mitral_sphere_pvs_manual(stdmesh, 'autolabels', o_file, os.path.join(fileroot, filenameroot + '_mvseed.vtp'), args.eams)
 else:
-    surfaceclipped = find_mitral_sphere_pvs(stdmesh, 'autolabels', o_file, args.eams)
-if args.vis > 0:
+    surfaceclipped = find_mitral_sphere_pvs(stdmesh, 'autolabels', o_file, args.eams, args.vis)
+if args.vis >= 1:
     visualise_two_meshes(surfaceclipped, surface, 'Mitral Valve clip')
 writevtk(cleanpolydata(surfaceclipped), o_file + '.vtk')
 

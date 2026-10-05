@@ -33,13 +33,22 @@ if __name__=="__main__":
     path_to_code = os.getcwd()  # Get the current working directory
     path_to_data = ""           # Add path to data here
 
-    for patient in sorted(os.listdir(path_to_data))[1:2]:          #Run for all patients or change index to run for a specific patient
+    for patient in sorted(os.listdir(path_to_data)):          #Run for all patients or change index to run for a specific patient
         print(f"Processing patient: {patient}")
         path_to_patient = f"{path_to_data}/{patient}"
         path_to_regions = f"{path_to_patient}/Regions"
         path_to_segmentation = f"{path_to_patient}/Segmentation"
         os.makedirs(path_to_regions, exist_ok=True)
-
+        remesh = False
+        if remesh:
+            file = "" #add filename that you want to remesh before editing out holes.
+            mesh = pv.PolyData(f"{path_to_segmentation}/{file}.stl")
+            npoints = len(mesh.points)
+            clus = pyacvd.Clustering(mesh)
+            clus.subdivide(3)
+            clus.cluster(npoints)
+            remesh = clus.create_mesh()
+            remesh.save(f"{path_to_segmentation}/{file}_remeshed.stl", binary=False)
         files = []
         if os.path.exists(f"{path_to_segmentation}/{patient}_holes.stl"):
             files.append(patient+'_holes')
@@ -65,13 +74,13 @@ if __name__=="__main__":
             if not os.path.exists(f"{path_to_segmentation}/{file}_clean.vtk"):
                 # Remesh the mesh to ensure uniformity
                 print(f"Remeshing mesh for patient {patient}, file {file}")
-                npoints = len(mesh.points)
+                npoints = len(mesh.points) + 500
                 clus = pyacvd.Clustering(mesh)
                 clus.subdivide(3)
                 clus.cluster(npoints)
                 remesh = clus.create_mesh()
                 remesh.save(f"{path_to_segmentation}/{file}_remeshed.vtk", binary=False)
-
+                
                 # Clean the mesh
                 mesh = Mesh(f"{path_to_segmentation}/{file}_remeshed.vtk")
                 vertices = mesh.vertices()

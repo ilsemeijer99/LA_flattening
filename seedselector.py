@@ -31,6 +31,8 @@ class vmtkPickPointSeedSelector(vmtkSeedSelector):
         self.PickedSeeds = vtk.vtkPolyData()
         self.vmtkRenderer = None
         self.OwnRenderer = 0
+        self.VisualizationPoints = vtk.vtkPoints()
+        self.VisualizationActor = None
 
     def UndoCallback(self, obj):
         self.InitializeSeeds()
@@ -67,6 +69,50 @@ class vmtkPickPointSeedSelector(vmtkSeedSelector):
         seedPoints = vtk.vtkPoints()
         self.PickedSeeds.SetPoints(seedPoints)
 
+    def SetVisualizationPoints(self, points):
+        self.VisualizationPoints = points
+
+    def VisualizePoints(self, points, color=(0.0, 1.0, 0.0)):
+        """
+        Visualize a vtkPoints object in the existing vmtk renderer.
+
+        Parameters
+        ----------
+        points : vtk.vtkPoints
+            Points to visualize.
+        color : tuple
+            RGB color, values from 0 to 1.
+        scale_factor : float or None
+            Sphere radius. If None, uses 1% of surface length.
+        """
+
+        point_polydata = vtk.vtkPolyData()
+        point_polydata.SetPoints(points)
+
+        glyph_source = vtk.vtkSphereSource()
+        glyph_source.SetThetaResolution(12)
+        glyph_source.SetPhiResolution(12)
+
+        glyphs = vtk.vtkGlyph3D()
+
+        if vtk.vtkVersion.GetVTKMajorVersion() > 5:
+            glyphs.SetInputData(point_polydata)
+        else:
+            glyphs.SetInput(point_polydata)
+
+        glyphs.SetSourceConnection(glyph_source.GetOutputPort())
+        glyphs.SetScaleModeToDataScalingOff()
+
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputConnection(glyphs.GetOutputPort())
+
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(*color)
+        actor.PickableOff()
+
+        self.vmtkRenderer.Renderer.AddActor(actor)
+
     def Execute(self):
 
         self._SourceSeedIds.Initialize()
@@ -75,6 +121,12 @@ class vmtkPickPointSeedSelector(vmtkSeedSelector):
             self.vmtkRenderer = vmtkrenderer.vmtkRenderer()
             self.vmtkRenderer.Initialize()
             self.OwnRenderer = 1
+        
+        if self.VisualizationPoints.GetNumberOfPoints() > 0:
+            self.VisualizePoints(
+                self.VisualizationPoints,
+                color=(1.0, 165/255, 0.0)
+            )
 
         glyphs = vtk.vtkGlyph3D()
         glyphSource = vtk.vtkSphereSource()

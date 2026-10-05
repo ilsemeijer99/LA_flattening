@@ -295,9 +295,6 @@ def vis_paths(m_open, conts, paths):
     render_window.SetSize(800, 800)
     render_window.Render()
     interactor.Start()
-import vtk
-import numpy as np
-
 
 def make_sphere_actor(center, radius, color, opacity=1.0, resolution=32):
     sphere = vtk.vtkSphereSource()
@@ -316,7 +313,6 @@ def make_sphere_actor(center, radius, color, opacity=1.0, resolution=32):
 
     return actor
 
-
 def make_line_actor(p1, p2, color, width=2):
     line = vtk.vtkLineSource()
     line.SetPoint1(p1)
@@ -331,7 +327,6 @@ def make_line_actor(p1, p2, color, width=2):
     actor.GetProperty().SetLineWidth(width)
 
     return actor
-
 
 def make_arrow_actor(start, end, color):
     arrow_source = vtk.vtkArrowSource()
@@ -384,7 +379,79 @@ def make_arrow_actor(start, end, color):
     actor.GetProperty().SetColor(color)
 
     return actor
+def vtk_mesh_actor(polydata, color=(0.7, 0.7, 0.7), opacity=0.25): 
+    mapper = vtk.vtkPolyDataMapper() 
+    mapper.SetInputData(polydata) 
+    actor = vtk.vtkActor() 
+    actor.SetMapper(mapper) 
+    actor.GetProperty().SetColor(color) 
+    actor.GetProperty().SetOpacity(opacity) 
+    return actor 
+    
+def vtk_contour_actor(contour_polydata, color=(1, 1, 1), width=4): 
+    mapper = vtk.vtkPolyDataMapper() 
+    mapper.SetInputData(contour_polydata) 
+    actor = vtk.vtkActor() 
+    actor.SetMapper(mapper) 
+    actor.GetProperty().SetColor(color) 
+    actor.GetProperty().SetLineWidth(width) 
+    return actor 
+    
+def visualize_minimum_diameter_vtk(mesh, points, contour_polydata): 
+    """ Visualize: - mesh - contour - minimum diameter line - winning points """ 
+    mesh_actor = vtk_mesh_actor( mesh, color=(0.8, 0.8, 0.8), opacity=0.25 ) 
+    contour_actor = vtk_contour_actor( contour_polydata, color=(1, 1, 1), width=4 ) 
+    line_actor = make_line_actor(points[0], points[1] , color=(1, 0, 0), width=6 ) 
+    
+    # --------------------------------------------------- # renderer # --------------------------------------------------- 
+    renderer = vtk.vtkRenderer() 
+    renderer.AddActor(mesh_actor) 
+    renderer.AddActor(contour_actor) 
+    renderer.AddActor(line_actor) 
+    renderer.SetBackground(0.1, 0.1, 0.1) 
+    # --------------------------------------------------- # render window # --------------------------------------------------- 
+    render_window = vtk.vtkRenderWindow() 
+    render_window.AddRenderer(renderer) 
+    render_window.SetSize(1000, 1000) 
+    # --------------------------------------------------- # interaction # --------------------------------------------------- 
+    interactor = vtk.vtkRenderWindowInteractor() 
+    interactor.SetRenderWindow(render_window) 
+    style = vtk.vtkInteractorStyleTrackballCamera() 
+    interactor.SetInteractorStyle(style) 
+    # --------------------------------------------------- # camera # --------------------------------------------------- 
+    renderer.ResetCamera() 
+    render_window.Render() 
+    interactor.Start()
 
+def visualize_contour_vtk(mesh, contour_polydata, convert=False): 
+    """ Visualize: - mesh - contour  """ 
+    mesh_actor = vtk_mesh_actor( mesh, color=(0.8, 0.8, 0.8), opacity=0.25 ) 
+    #contour_actor = vtk_contour_actor( contour_polydata, color=(1, 1, 1), width=4 ) 
+    
+    # --------------------------------------------------- # renderer # --------------------------------------------------- 
+    renderer = vtk.vtkRenderer() 
+    renderer.AddActor(mesh_actor) 
+    if convert:
+        for i in range(-1,len(contour_polydata)-1):
+            line_actor = make_line_actor( contour_polydata[i], contour_polydata[i+1], color=(1, 1, 1), width=4 )
+            renderer.AddActor(line_actor) 
+    else:
+        contour_actor = vtk_contour_actor( contour_polydata, color=(1, 1, 1), width=4 )
+        renderer.AddActor(contour_actor) 
+    renderer.SetBackground(0.1, 0.1, 0.1) 
+    # --------------------------------------------------- # render window # --------------------------------------------------- 
+    render_window = vtk.vtkRenderWindow() 
+    render_window.AddRenderer(renderer) 
+    render_window.SetSize(1000, 1000) 
+    # --------------------------------------------------- # interaction # --------------------------------------------------- 
+    interactor = vtk.vtkRenderWindowInteractor() 
+    interactor.SetRenderWindow(render_window) 
+    style = vtk.vtkInteractorStyleTrackballCamera() 
+    interactor.SetInteractorStyle(style) 
+    # --------------------------------------------------- # camera # --------------------------------------------------- 
+    renderer.ResetCamera() 
+    render_window.Render() 
+    interactor.Start()
 
 def visualise_mv_sphere_vtk(
         surface,
@@ -537,7 +604,7 @@ def visualise_computelengthalongvector(renderer,
             furthestpoint1,
             furthestpoint2,
             color,
-            width=6
+            width=3
         )
     )
 
@@ -546,7 +613,7 @@ def visualise_computelengthalongvector(renderer,
         make_sphere_actor(
             furthestpoint1,
             1.2,
-            color
+            (0,0,0)
         )
     )
 
@@ -557,11 +624,6 @@ def visualise_computelengthalongvector(renderer,
             color
         )
     )
-
-
-    # Print measured length
-    print("Measured length:", length)
-
 
 def visualise_body_dimensions_vtk(
         body,
@@ -634,13 +696,11 @@ def plot_regions(
     background=(1, 1, 1),
 ):
 
-    regions = np.asarray(regions).astype(int)
-
     region_array = vtk.vtkIntArray()
     region_array.SetName("Regions")
 
     for r in regions:
-        region_array.InsertNextValue(int(r))
+        region_array.InsertNextValue(r)
 
     polydata.GetCellData().SetScalars(region_array)
 
@@ -655,59 +715,30 @@ def plot_regions(
     annotations.SetNumberOfValues(len(unique_regions))
 
     for i, region in enumerate(unique_regions):
-
         rgb = cmap(i % cmap.N)[:3]
-
-        lut.SetTableValue(
-            int(region),
-            rgb[0],
-            rgb[1],
-            rgb[2],
-            1.0
-        )
-
-        # Add annotation for legend labels
-        if region_dict is not None:
-            lut.SetAnnotation(
-                float(region),
-                region_dict.get(region, str(region))
-            )
-        else:
-            lut.SetAnnotation(
-                float(region),
-                str(region)
-            )
+        lut.SetTableValue(region, rgb[0], rgb[1], rgb[2], 1.0)
+        label = region_dict[region] if region_dict is not None else str(region)
+        lut.SetAnnotation(i, label)
 
     mapper = vtk.vtkPolyDataMapper()
     mapper.SetInputData(polydata)
     mapper.SetLookupTable(lut)
     mapper.SetScalarModeToUseCellData()
-    # mapper.SetScalarRange(
-    #     1,
-    #    len(unique_regions) + 0.5
-    # )
+    mapper.SetScalarRange(-0.5, len(unique_regions) - 0.5)
 
     actor = vtk.vtkActor()
     actor.SetMapper(mapper)
 
     scalar_bar = vtk.vtkScalarBarActor()
     scalar_bar.SetLookupTable(lut)
-    #scalar_bar.SetTitle("Regions")
-    scalar_bar.DrawAnnotationsOn()
+    scalar_bar.SetMaximumWidthInPixels(100)
     scalar_bar.SetNumberOfLabels(0)
-    scalar_bar.SetOrientationToVertical()
-
-    scalar_bar.SetTextPad(10)
-    scalar_bar.SetAnnotationTextScaling(False)
+    scalar_bar.SetTextPositionToPrecedeScalarBar()
+    scalar_bar.FixedAnnotationLeaderLineColorOn()
+    scalar_bar.SetPosition(0.80, 0.10)
     label_prop = scalar_bar.GetAnnotationTextProperty()
-
     label_prop.SetColor(0, 0, 0)
-
-    label_prop.SetFontSize(16)
-
-    label_prop.BoldOff()
-
-    #scalar_bar.GetTitleTextProperty().SetColor(0,0,0)
+    label_prop.SetFontSize(18)
 
     renderer = vtk.vtkRenderer()
     renderer.AddActor(actor)
@@ -720,6 +751,79 @@ def plot_regions(
 
     interactor = vtk.vtkRenderWindowInteractor()
     interactor.SetRenderWindow(render_window)
+
+    render_window.Render()
+    interactor.Start()
+
+def visualise_line_segment(
+        body,
+        center_body,
+        measurepoint,
+        pvdirn,
+        pvcrossn,
+        ostiacrossn,
+        bodylength,
+        bodywidth,
+        bodythick, 
+        start_point,
+        end_point):
+
+    """
+    Visualize:
+    - body length direction
+    - body width
+    - body thickness
+    """
+
+    # Renderer
+    renderer = vtk.vtkRenderer()
+    renderer.SetBackground(1, 1, 1)
+
+    render_window = vtk.vtkRenderWindow()
+    render_window.AddRenderer(renderer)
+    render_window.SetSize(1400, 1000)
+
+    interactor = vtk.vtkRenderWindowInteractor()
+    interactor.SetRenderWindow(render_window)
+
+    # Surface mesh
+    poly = vtk.vtkPolyData()
+    poly.DeepCopy(body)
+
+    mapper = vtk.vtkPolyDataMapper()
+    mapper.SetInputData(poly)
+
+    mesh_actor = vtk.vtkActor()
+    mesh_actor.SetMapper(mapper)
+
+    mesh_actor.GetProperty().SetColor(0.8, 0.8, 0.8)
+    mesh_actor.GetProperty().SetOpacity(0.3)
+
+    renderer.AddActor(mesh_actor)
+
+    # Main points
+    visualise_computelengthalongvector(renderer, body, center_body, pvdirn, (0, 0, 1))
+    visualise_computelengthalongvector(renderer, body, measurepoint, ostiacrossn, (0, 0.7, 0))
+    visualise_computelengthalongvector(renderer, body, measurepoint, pvcrossn, (0.6, 0, 0.6))
+    
+    renderer.AddActor(
+            make_line_actor(
+                start_point,
+                end_point,
+                (0,1,0),
+                width=7
+            )
+        )
+
+    renderer.AddActor(
+        make_sphere_actor(center_body, 1.0, (1, 0, 0))
+    )
+
+    renderer.AddActor(
+        make_sphere_actor(measurepoint, 1.0, (0, 0, 0))
+    )
+
+    renderer.ResetCamera()
 
     render_window.Render()
     interactor.Start()
